@@ -74,6 +74,71 @@ export function clipWaveform(analysis, start, duration, count = 110) {
   });
 }
 
+const BASE_LAYOUT = {
+  header: { seriesY: 171, markY: 252, markSize: 50, findsY: 348, findsSize: 111, ruleY: 379 },
+  art: { x: 470, y: 764, size: 720 },
+  glowY: 700,
+  rings: { x: 474, y: 760, radius: 406, step: 32, yExtra: 10 },
+  onRepeatY: 1155,
+  titleY: 1211,
+  titleSize: 37,
+  titleStep: 46,
+  artistY: 1300,
+  artistSize: 24,
+  spectrumY: 1351,
+  barBase: 1477,
+  barMax: 108,
+  waveY: 1550,
+  waveMax: 70,
+  timeY: 1616,
+  ruleY: 1640,
+  levelY: 1681,
+  levelValueY: 1717,
+  lyric: null,
+};
+const LYRIC_LAYOUT = {
+  header: { seriesY: 158, markY: 230, markSize: 46, findsY: 312, findsSize: 92, ruleY: 342 },
+  art: { x: 470, y: 640, size: 500 },
+  glowY: 576,
+  rings: { x: 474, y: 640, radius: 290, step: 22, yExtra: 8 },
+  onRepeatY: 948,
+  titleY: 1000,
+  titleSize: 34,
+  titleStep: 42,
+  artistY: 1096,
+  artistSize: 22,
+  spectrumY: 1376,
+  barBase: 1468,
+  barMax: 72,
+  waveY: 1532,
+  waveMax: 52,
+  timeY: 1588,
+  ruleY: 1612,
+  levelY: 1656,
+  levelValueY: 1692,
+  lyric: { x: 110, y: 1136, width: 720, height: 196 },
+};
+export const frameLayout = (hasCaptions) =>
+  hasCaptions ? LYRIC_LAYOUT : BASE_LAYOUT;
+
+const LOGO_SCALE = 2.2;
+const LOGO_LOCAL_CENTER = 50;
+
+function drawBrandOverlay(ctx, accent, reveal) {
+  ctx.save();
+  ctx.globalAlpha = reveal;
+  ctx.fillStyle = "#06090f";
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  ctx.restore();
+  drawLogo(ctx, {
+    x: WIDTH / 2,
+    y: HEIGHT / 2 - LOGO_LOCAL_CENTER * LOGO_SCALE,
+    scale: LOGO_SCALE,
+    accent,
+    reveal,
+  });
+}
+
 export function drawFrame(
   ctx,
   {
@@ -121,41 +186,17 @@ export function drawFrame(
     ctx.restore();
     return;
   }
-  if (phase.stage === "outro") {
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    const glow = ctx.createRadialGradient(470, 740, 5, 470, 740, 730);
-    glow.addColorStop(0, `${colors.accent}28`);
-    glow.addColorStop(1, `${colors.accent}00`);
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    drawLogo(ctx, {
-      x: 470,
-      y: 750,
-      accent: colors.accent,
-      reveal: phase.logo,
-    });
-    ctx.globalAlpha = ease(phase.local / 0.5) * ease((3.2 - phase.local) / 0.5);
-    if (art) ctx.drawImage(art, 406, 1256, 128, 128);
-    ctx.textAlign = "center";
-    wrap(ctx, track?.title || "", 720, 30, 2).forEach((line, i) =>
-      text(ctx, line, 470, 1450 + i * 39, 30, "#fff", 700),
-    );
-    text(
-      ctx,
-      wrap(ctx, track?.artist || "", 720, 23, 1)[0],
-      470,
-      1560,
-      23,
-      colors.secondary,
-      500,
-    );
-    ctx.restore();
-    return;
-  }
+  const layout = frameLayout(captions.length > 0);
   ctx.fillStyle = colors.bg;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  const glow = ctx.createRadialGradient(520, 700, 60, 520, 700, 1030);
+  const glow = ctx.createRadialGradient(
+    layout.art.x + 50,
+    layout.glowY,
+    60,
+    layout.art.x + 50,
+    layout.glowY,
+    1030,
+  );
   glow.addColorStop(0, `${colors.accent}38`);
   glow.addColorStop(1, `${colors.accent}00`);
   ctx.fillStyle = glow;
@@ -180,10 +221,10 @@ export function drawFrame(
   for (let i = 0; i < 3; i++) {
     ctx.beginPath();
     ctx.ellipse(
-      474,
-      760,
-      406 + i * 32 + frame.peak * 9,
-      416 + i * 32,
+      layout.rings.x,
+      layout.rings.y,
+      layout.rings.radius + i * layout.rings.step + frame.peak * 9,
+      layout.rings.radius + layout.rings.yExtra + i * layout.rings.step,
       time * 0.08,
       0,
       Math.PI * 2,
@@ -191,27 +232,28 @@ export function drawFrame(
     ctx.stroke();
   }
 
+  const header = layout.header;
   ctx.fillStyle = colors.accent;
   ctx.beginPath();
-  ctx.arc(119, 162, 7, 0, Math.PI * 2);
+  ctx.arc(119, header.seriesY - 9, 7, 0, Math.PI * 2);
   ctx.fill();
-  text(ctx, "THE DISCOVERY SERIES", 142, 171, 22, "#ffffffb8", 500);
+  text(ctx, "THE DISCOVERY SERIES", 142, header.seriesY, 22, "#ffffffb8", 500);
   text(
     ctx,
     `VOL. ${episode.padStart(3, "0")}`,
     714,
-    171,
+    header.seriesY,
     21,
     colors.secondary,
     500,
   );
-  text(ctx, "SOUNDCLOUD", 110, 252, 50, "#ffffff", 700);
-  text(ctx, "FINDS", 104, 348, 111, colors.accent, 800);
-  rule(ctx, 110, 379, 720, "#ffffff30");
+  text(ctx, "SOUNDCLOUD", 110, header.markY, header.markSize, "#ffffff", 700);
+  text(ctx, "FINDS", 104, header.findsY, header.findsSize, colors.accent, 800);
+  rule(ctx, 110, header.ruleY, 720, "#ffffff30");
 
-  const size = 720;
+  const size = layout.art.size;
   ctx.save();
-  ctx.translate(470, 764);
+  ctx.translate(layout.art.x, layout.art.y);
   const scale = 1 + Math.min(1, frame.peak) * 0.006;
   ctx.scale(scale, scale);
   ctx.shadowColor = "#00000088";
@@ -233,102 +275,114 @@ export function drawFrame(
       size,
     );
   } else {
-    const gradient = ctx.createLinearGradient(-360, -360, 360, 360);
+    const fit = size / 720;
+    const gradient = ctx.createLinearGradient(
+      -size / 2,
+      -size / 2,
+      size / 2,
+      size / 2,
+    );
     gradient.addColorStop(0, colors.accent);
     gradient.addColorStop(1, colors.bg);
     ctx.fillStyle = gradient;
-    ctx.fillRect(-360, -360, 720, 720);
-    text(ctx, "YOUR NEXT", -288, -10, 56, "#fff", 700);
-    text(ctx, "FAVORITE.", -288, 70, 70, "#fff", 800);
+    ctx.fillRect(-size / 2, -size / 2, size, size);
+    text(ctx, "YOUR NEXT", -288 * fit, -10 * fit, 56 * fit, "#fff", 700);
+    text(ctx, "FAVORITE.", -288 * fit, 70 * fit, 70 * fit, "#fff", 800);
   }
   ctx.restore();
-  drawCaptions(ctx, captions, time, colors.accent);
-  text(ctx, "01 / ON REPEAT", 110, 1155, 18, colors.secondary, 500);
+  text(ctx, "01 / ON REPEAT", 110, layout.onRepeatY, 18, colors.secondary, 500);
   const titleLines = wrap(
     ctx,
     track?.title || "A good find deserves a moment.",
     720,
-    37,
+    layout.titleSize,
     2,
   );
   titleLines.forEach((line, i) =>
-    text(ctx, line, 110, 1211 + i * 46, 37, "#fff", 700),
+    text(
+      ctx,
+      line,
+      110,
+      layout.titleY + i * layout.titleStep,
+      layout.titleSize,
+      "#fff",
+      700,
+    ),
   );
   const artist = wrap(
     ctx,
     track?.artist || "Paste a track. Make it move.",
     720,
-    24,
+    layout.artistSize,
     1,
   )[0];
-  text(ctx, artist, 110, 1300, 24, "#ffffffa8", 500);
+  text(ctx, artist, 110, layout.artistY, layout.artistSize, "#ffffffa8", 500);
+  if (layout.lyric)
+    drawCaptions(ctx, captions, time, colors.accent, layout.lyric);
 
-  text(ctx, "FREQUENCY SPECTRUM", 110, 1351, 17, "#ffffffa8", 500);
-  text(ctx, "40 Hz — 7.2 kHz", 650, 1351, 16, "#ffffff80", 400);
+  text(ctx, "FREQUENCY SPECTRUM", 110, layout.spectrumY, 17, "#ffffffa8", 500);
   const gap = 5,
     barWidth = (720 - gap * 55) / 56;
-  const gradient = ctx.createLinearGradient(0, 1370, 0, 1477);
+  const gradient = ctx.createLinearGradient(
+    0,
+    layout.barBase - layout.barMax,
+    0,
+    layout.barBase,
+  );
   gradient.addColorStop(0, colors.secondary);
   gradient.addColorStop(1, colors.accent);
   ctx.fillStyle = gradient;
   frame.bands.forEach((value, i) => {
-    const barHeight = Math.max(3, value * 108);
+    const barHeight = Math.max(3, value * layout.barMax);
     ctx.fillRect(
       110 + i * (barWidth + gap),
-      1477 - barHeight,
+      layout.barBase - barHeight,
       barWidth,
       barHeight,
     );
   });
-  rule(ctx, 110, 1487, 720, "#ffffff20");
+  rule(ctx, 110, layout.barBase + 10, 720, "#ffffff20");
 
   const points = wave || clipWaveform(analysis, start, duration);
   points.forEach((value, i) => {
-    const barHeight = Math.max(3, value * 70);
+    const barHeight = Math.max(3, value * layout.waveMax);
     ctx.fillStyle = i / points.length <= progress ? colors.accent : "#ffffff35";
     ctx.fillRect(
       110 + (i * 720) / points.length,
-      1550 - barHeight / 2,
+      layout.waveY - barHeight / 2,
       3.5,
       barHeight,
     );
   });
+  const playhead = layout.waveMax + 10;
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(110 + progress * 720, 1510, 2, 80);
-  text(ctx, clock(start + phase.musicTime), 110, 1616, 20, "#fff", 500);
-  text(ctx, clock(start + duration), 771, 1616, 20, "#ffffff80", 500);
-  rule(ctx, 110, 1640, 720, "#ffffff20");
-  text(ctx, "LEVEL", 110, 1681, 15, "#ffffff80", 500);
-  text(ctx, `${frame.rms} dBFS`, 110, 1717, 25, colors.secondary, 600);
-  text(ctx, "BRIGHTNESS", 383, 1681, 15, "#ffffff80", 500);
+  ctx.fillRect(
+    110 + progress * 720,
+    layout.waveY - playhead / 2,
+    2,
+    playhead,
+  );
+  text(ctx, clock(start + phase.musicTime), 110, layout.timeY, 20, "#fff", 500);
   text(
     ctx,
-    `${(frame.centroid / 1000).toFixed(2)} kHz`,
-    383,
-    1717,
+    clock(start + duration),
+    771,
+    layout.timeY,
+    20,
+    "#ffffff80",
+    500,
+  );
+  rule(ctx, 110, layout.ruleY, 720, "#ffffff20");
+  text(ctx, "LEVEL", 110, layout.levelY, 15, "#ffffff80", 500);
+  text(
+    ctx,
+    `${frame.rms} dBFS`,
+    110,
+    layout.levelValueY,
     25,
     colors.secondary,
     600,
   );
-  text(ctx, "FORMAT", 685, 1681, 15, "#ffffff80", 500);
-  text(ctx, "9:16 / 30", 685, 1717, 25, colors.secondary, 600);
-  text(ctx, "GOOD MUSIC. FOUND HERE.", 110, 1810, 18, "#ffffff60", 500);
-  if (phase.logo > 0) {
-    const veilHeight = captions.length ? 480 : 720;
-    const veil = ctx.createLinearGradient(0, 404, 0, 404 + veilHeight);
-    veil.addColorStop(0, "rgba(6, 9, 15, 0)");
-    veil.addColorStop(0.12, `rgba(6, 9, 15, ${phase.logo * 0.94})`);
-    veil.addColorStop(0.83, `rgba(6, 9, 15, ${phase.logo * 0.94})`);
-    veil.addColorStop(1, "rgba(6, 9, 15, 0)");
-    ctx.fillStyle = veil;
-    ctx.fillRect(110, 404, 720, veilHeight);
-    drawLogo(ctx, {
-      x: 470,
-      y: captions.length ? 575 : 673,
-      scale: captions.length ? 0.59 : 0.86,
-      accent: colors.accent,
-      reveal: phase.logo,
-    });
-  }
+  if (phase.logo > 0) drawBrandOverlay(ctx, colors.accent, phase.logo);
   ctx.restore();
 }

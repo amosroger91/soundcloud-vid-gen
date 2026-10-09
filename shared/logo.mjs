@@ -58,9 +58,6 @@ export function drawLogo(
   ctx.font = "800 104px Montserrat, Arial, sans-serif";
   ctx.fillText("FINDS", 0, 313);
   ctx.restore();
-  ctx.fillStyle = `${light}99`;
-  ctx.font = "500 14px Montserrat, Arial, sans-serif";
-  ctx.fillText("GOOD MUSIC. FOUND HERE.", 0, 364);
   ctx.restore();
 }
 export function logoSvg(accent = "#ff7546") {
@@ -70,5 +67,5 @@ export function logoSvg(accent = "#ff7546") {
         `<rect x="${321 + index * 28}" y="${250 - height / 2}" width="18" height="${height}" rx="9"/>`,
     )
     .join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 740" role="img" aria-label="SoundCloud Finds"><title>SoundCloud Finds — discovery pulse logo</title><g fill="none" stroke="${accent}" stroke-width="4"><path d="M483 106 A166 166 0 1 1 423 86" stroke-linecap="round"/><circle cx="400" cy="250" r="182" stroke-opacity=".3" stroke-width="1"/></g><g fill="${accent}">${bars}<path d="M499 96l12 12-12 12-12-12z"/></g><g fill="white" text-anchor="middle" font-family="Montserrat,Arial,sans-serif"><text x="400" y="499" font-size="38" font-weight="600">SOUNDCLOUD</text><text x="400" y="613" font-size="104" font-weight="800">FINDS</text><text x="400" y="664" font-size="14" opacity=".6">GOOD MUSIC. FOUND HERE.</text></g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 740" role="img" aria-label="SoundCloud Finds"><title>SoundCloud Finds — discovery pulse logo</title><g fill="none" stroke="${accent}" stroke-width="4"><path d="M483 106 A166 166 0 1 1 423 86" stroke-linecap="round"/><circle cx="400" cy="250" r="182" stroke-opacity=".3" stroke-width="1"/></g><g fill="${accent}">${bars}<path d="M499 96l12 12-12 12-12-12z"/></g><g fill="white" text-anchor="middle" font-family="Montserrat,Arial,sans-serif"><text x="400" y="499" font-size="38" font-weight="600">SOUNDCLOUD</text><text x="400" y="613" font-size="104" font-weight="800">FINDS</text></g></svg>`;
 }

@@ -886,6 +886,11 @@ export default function App() {
               />
             )}
           </div>
+          {result && (
+            <a className="video-download" href={result.downloadUrl}>
+              <ArrowDownToLine size={18} /> Download MP4
+            </a>
+          )}
           <div className="playback-controls">
             <button
               className="icon-button"

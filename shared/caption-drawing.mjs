@@ -1,18 +1,18 @@
-import { cueAt, cueWords } from "./captions.mjs";
-import { ease } from "./timeline.mjs";
+import { lyricPresentation } from "./captions.mjs";
 
-export function drawCaptions(ctx, cues, time, accent) {
-  const cue = cueAt(cues, time);
-  if (!cue) return;
-  const words = cueWords(cue);
-  let size = 44;
+export function drawCaptions(ctx, cues, time, accent, band) {
+  const presentation = lyricPresentation(cues, time);
+  if (!presentation.visible || !band) return presentation;
+  const words = presentation.words;
+  let size = 40;
+  const widthLimit = band.width - 8;
   const layout = () => {
-    ctx.font = `800 ${size}px Montserrat, Arial, sans-serif`;
+    ctx.font = `700 ${size}px Montserrat, Arial, sans-serif`;
     const lines = [[]];
     for (const word of words) {
       const line = lines.at(-1);
-      const candidate = [...line, word].map((word) => word.text).join(" ");
-      if (line.length && ctx.measureText(candidate).width > 646)
+      const candidate = [...line, word].map((item) => item.text).join(" ");
+      if (line.length && ctx.measureText(candidate).width > widthLimit)
         lines.push([word]);
       else line.push(word);
     }
@@ -21,56 +21,42 @@ export function drawCaptions(ctx, cues, time, accent) {
   let lines = layout();
   while (
     (lines.length > 3 ||
+      lines.length * (size + 14) > band.height ||
       lines.some(
         (line) =>
-          ctx.measureText(line.map((word) => word.text).join(" ")).width > 646,
+          ctx.measureText(line.map((word) => word.text).join(" ")).width >
+          widthLimit,
       )) &&
-    size > 18
+    size > 20
   ) {
     size -= 2;
     lines = layout();
   }
-  const entrance = ease((time - cue.start) / 0.15);
-  const exit = ease((cue.end - time) / 0.16);
+  const lineHeight = size + 14;
+  const top = band.y + 4;
   ctx.save();
-  ctx.globalAlpha *= Math.min(entrance, exit);
-  const height = lines.length * (size + 13) + 38;
-  const y = 983 - height / 2 + (1 - entrance) * 10;
-  ctx.shadowColor = "#00000099";
-  ctx.shadowBlur = 22;
-  ctx.fillStyle = "#080b12ed";
-  ctx.beginPath();
-  ctx.roundRect(110, y, 720, height, 17);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = accent;
-  ctx.fillRect(110, y + 17, 3, height - 34);
   ctx.textBaseline = "middle";
-  ctx.font = `800 ${size}px Montserrat, Arial, sans-serif`;
+  ctx.font = `700 ${size}px Montserrat, Arial, sans-serif`;
   const space = ctx.measureText(" ").width;
   lines.forEach((line, index) => {
-    const lineWidth = ctx.measureText(
-      line.map((word) => word.text).join(" "),
-    ).width;
-    let x = 470 - lineWidth / 2;
+    let x = band.x;
+    const baseline = top + lineHeight * index + lineHeight / 2;
     for (const word of line) {
       const width = ctx.measureText(word.text).width;
-      const baseline = y + 22 + (size + 13) * index + size / 2;
       const isActive = time >= word.start && time < word.end;
-      if (isActive) {
-        ctx.fillStyle = accent;
-        ctx.beginPath();
-        ctx.roundRect(x - 7, baseline - size / 2 - 5, width + 14, size + 11, 7);
-        ctx.fill();
-      }
       ctx.fillStyle = isActive
-        ? "#0b1018"
+        ? accent
         : time >= word.end
           ? "#ffffff"
-          : "#ffffffb8";
+          : "#ffffffc4";
       ctx.fillText(word.text, x, baseline);
+      if (isActive) {
+        ctx.fillStyle = accent;
+        ctx.fillRect(x, baseline + size * 0.42, width, 4);
+      }
       x += width + space;
     }
   });
   ctx.restore();
+  return presentation;
 }

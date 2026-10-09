@@ -55,6 +55,120 @@ export function groupWords(words) {
 }
 export const cueAt = (cues, time) =>
   cues?.find((cue) => time >= cue.start && time < cue.end);
+export function lyricPresentation(cues, time) {
+  const cue = cueAt(cues, time);
+  if (!cue) return { visible: false, cue: null, words: [], activeWord: null };
+  const words = cueWords(cue);
+  return {
+    visible: true,
+    cue,
+    words,
+    activeWord:
+      words.find((word) => time >= word.start && time < word.end) || null,
+  };
+}
+function lyricToken(text) {
+  return String(text)
+    .toLowerCase()
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}']+/gu, "");
+}
+function median(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+// Scores heard words against a reference you timed by ear.
+// Onset bias is heard start minus reference start, in milliseconds.
+// Positive bias means the lyric is late. WER counts substitutions, deletions, and insertions.
+export function scoreLyricSync(hypothesis, reference) {
+  const hyp = (hypothesis || [])
+    .map((word) => ({ ...word, token: lyricToken(word.text) }))
+    .filter((word) => word.token);
+  const ref = (reference || [])
+    .map((word) => ({ ...word, token: lyricToken(word.text) }))
+    .filter((word) => word.token);
+  const cost = Array.from({ length: hyp.length + 1 }, () =>
+    new Uint16Array(ref.length + 1),
+  );
+  const step = Array.from({ length: hyp.length + 1 }, () =>
+    new Uint8Array(ref.length + 1),
+  );
+  for (let i = 1; i <= hyp.length; i++) {
+    cost[i][0] = i;
+    step[i][0] = 2;
+  }
+  for (let j = 1; j <= ref.length; j++) {
+    cost[0][j] = j;
+    step[0][j] = 3;
+  }
+  for (let i = 1; i <= hyp.length; i++) {
+    for (let j = 1; j <= ref.length; j++) {
+      const substitution =
+        cost[i - 1][j - 1] + (hyp[i - 1].token === ref[j - 1].token ? 0 : 1);
+      const insertion = cost[i - 1][j] + 1;
+      const deletion = cost[i][j - 1] + 1;
+      let best = substitution;
+      let direction = 1;
+      if (insertion < best) {
+        best = insertion;
+        direction = 2;
+      }
+      if (deletion < best) {
+        best = deletion;
+        direction = 3;
+      }
+      cost[i][j] = best;
+      step[i][j] = direction;
+    }
+  }
+  let substitutions = 0,
+    insertions = 0,
+    deletions = 0,
+    i = hyp.length,
+    j = ref.length;
+  const onsetMs = [];
+  while (i > 0 || j > 0) {
+    const direction = step[i][j];
+    if (direction === 1) {
+      if (hyp[i - 1].token === ref[j - 1].token)
+        onsetMs.push((hyp[i - 1].start - ref[j - 1].start) * 1000);
+      else substitutions++;
+      i--;
+      j--;
+    } else if (direction === 2) {
+      insertions++;
+      i--;
+    } else {
+      deletions++;
+      j--;
+    }
+  }
+  const errors = substitutions + insertions + deletions;
+  const within = (limit) =>
+    onsetMs.length
+      ? onsetMs.filter((value) => Math.abs(value) <= limit).length /
+        onsetMs.length
+      : null;
+  return {
+    wer: ref.length === 0 ? (hyp.length === 0 ? 0 : 1) : errors / ref.length,
+    substitutions,
+    insertions,
+    deletions,
+    matched: onsetMs.length,
+    hypothesisCount: hyp.length,
+    referenceCount: ref.length,
+    meanSignedOnsetMs: onsetMs.length
+      ? onsetMs.reduce((sum, value) => sum + value, 0) / onsetMs.length
+      : null,
+    medianAbsOnsetMs: median(onsetMs.map((value) => Math.abs(value))),
+    within200: within(200),
+    within400: within(400),
+  };
+}
 export function cueWords(cue) {
   if (cue.words?.length) return cue.words;
   const words = cue.text.trim().split(/\s+/);

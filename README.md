@@ -151,11 +151,19 @@ The browser check exercises demo import, lyric editing, instrumental transcripti
 
 For additional transcription testing, supply a local vocal WAV to `node scripts/check-transcription.mjs <file.wav>`. `node scripts/check-vocal-workflow.mjs <file.wav>` mixes a fixture over original demo music, exercises transcription/export through the running HTTP server, and verifies cancellation preserves source media. Its default fixture expects the original test phrase containing “city lights”; adapt that assertion for a different fixture.
 
+Lyric timing is checked in two separate ways. `npm test` renders frames and requires the highlighted word to change on its timestamp, within one frame at 30 fps, inside the reserved lyric slot rather than over the artwork. Extraction quality is scored against words you timed by ear:
+
+```bash
+node scripts/check-lyric-sync.mjs song.wav reference.json [start] [duration]
+```
+
+`reference.json` is `{ "words": [ { "text": "city", "start": 0.42, "end": 0.81 } ] }`, with times in seconds into the clip. The report gives word error rate and onset error. A positive onset bias means the lyric is late. It fails when the median onset error is over 250 ms or the word error rate is over 35%.
+
 ## Notes / conventions
 
 - **Review generated lyrics.** Whisper is speech recognition, not a guaranteed lyric database. Singing, reverb, instruments, and language can reduce accuracy or produce hallucinations. Silent regions are filtered, and the known instrumental demo skips transcription. Clear mistaken lines, edit timing, or use instrumental mode. Word timings can also need correction; manually edited phrases get evenly spaced highlights within their cue.
 - Use audio and artwork you are allowed to download and reuse. Availability and attribution do not grant redistribution rights. Private, removed, region-restricted, or subscription-only tracks may fail. The importer does not use account cookies, proxies, or DRM bypasses. MP3 conversion does not improve source quality.
-- The spectrum and waveform come from actual audio. “Level” is windowed RMS in dBFS; “Brightness” is the spectral centroid in kHz. These are not BPM or loudness-normalization measurements. Analysis runs at 16 kHz; displayed spectrum spans approximately 40 Hz–7.2 kHz.
+- The spectrum and waveform come from actual audio. “Level” is windowed RMS in dBFS. It is not a BPM or loudness-normalization measurement. Analysis runs at 16 kHz; the spectrum covers approximately 40 Hz–7.2 kHz.
 - Rendering and transcription run in a separate process; speed depends on CPU and storage. Encoding/inference use four CPU threads. A local `DATA_DIR` may improve performance when source code lives on a network drive.
 - Media remains local until you remove it. Stop the app before cleaning `data/`. Keep wanted exports first; removing the entire `data/` folder resets the library. The separately located speech-model cache can also be removed to reclaim space.
 - No secrets in the repo. `.env`, media, binaries, dependencies, and certificates are ignored. Do not expose the unauthenticated server directly to the internet; shared hosting would require authentication, quotas, and storage lifecycle management.

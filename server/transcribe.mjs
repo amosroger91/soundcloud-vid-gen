@@ -47,15 +47,16 @@ export async function transcribeAudio(
   signal,
 ) {
   report(3, "Preparing audio for lyric transcription…");
+  // Seek after the input so the clip starts on the exact sample. A leading seek can begin early and shift every word.
   const raw = await run(
     ffmpegPath,
     [
       "-v",
       "error",
-      "-ss",
-      String(start),
       "-i",
       file,
+      "-ss",
+      String(start),
       "-t",
       String(duration),
       "-vn",

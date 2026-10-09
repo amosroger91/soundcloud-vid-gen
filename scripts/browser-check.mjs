@@ -111,12 +111,11 @@ try {
   });
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.getByRole("button", { name: /^Generate video/ }).click();
-  await page
-    .getByRole("link", { name: "Download MP4", exact: true })
-    .waitFor({ timeout: 240000 });
-  const downloadUrl = await page
-    .getByRole("link", { name: "Download MP4", exact: true })
-    .getAttribute("href");
+  const videoDownload = page
+    .locator(".preview-section")
+    .getByRole("link", { name: "Download MP4", exact: true });
+  await videoDownload.waitFor({ timeout: 240000 });
+  const downloadUrl = await videoDownload.getAttribute("href");
   const response = await page.request.get(
     new URL(downloadUrl, page.url()).href,
   );

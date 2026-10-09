@@ -610,6 +610,7 @@ progress {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   border: 1px solid var(--blue);
   padding: 15px;
@@ -624,8 +625,32 @@ progress {
   align-items: center;
 }
 .download-link {
-  text-decoration: underline;
+  background: var(--blue);
+  color: #fff;
   font-weight: 600;
+  padding: 10px 14px;
+  text-decoration: none;
+}
+.download-link:hover {
+  background: #1a5a82;
+}
+.video-download {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 360px;
+  margin: 16px auto 0;
+  background: #fff;
+  color: var(--dark);
+  padding: 14px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+.video-download:hover {
+  background: #e8eef2;
 }
 .back-edit {
   color: #fff;
@@ -717,7 +742,8 @@ footer a:hover {
     padding-left: 40px;
     padding-right: 40px;
   }
-  .video-stage {
+  .video-stage,
+  .video-download {
     max-width: 370px;
   }
 }
@@ -798,7 +824,8 @@ footer a:hover {
     position: static;
     padding: 23px 28px;
   }
-  .video-stage {
+  .video-stage,
+  .video-download {
     max-width: 340px;
   }
   .preview-features > span {
