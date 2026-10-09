@@ -6,7 +6,7 @@
 **Requested repository:** https://github.com/amosroger91/soundcloud-vid-gen.git
 **Goal:** Turn a SoundCloud song URL into a visually polished vertical video with the song, artist, album artwork, audio visualizations, synchronized lyric subtitles, custom branding, matching intro/outro animations, a thank-you ending, and an automatically generated video description.
 
-Checked items reflect implemented work or completed verification. All application features are implemented and locally verified; final GitHub delivery is tracked below.
+Checked items reflect implemented work or completed verification. All application features are implemented, locally verified, and published on `main`.
 
 ## 1. Create the Node/npm project
 
@@ -109,12 +109,14 @@ Checked items reflect implemented work or completed verification. All applicatio
 
 ## 9. Push the finished project to GitHub
 
-- [ ] Review the final source changes and confirm generated media and secrets are excluded.
-- [ ] Commit the completed implementation and documentation.
-- [ ] Put the finished project on `main` as requested.
-- [ ] Push to `https://github.com/amosroger91/soundcloud-vid-gen.git` after the requested features are complete.
-- [ ] Confirm the push succeeded and the remote contains the finished project.
-- [ ] Report the repository link, local project path, startup command, and any remaining limitations.
+- [x] Review the final source changes and confirm generated media and secrets are excluded.
+- [x] Commit the completed implementation and documentation.
+- [x] Put the finished project on `main` as requested.
+- [x] Push to `https://github.com/amosroger91/soundcloud-vid-gen.git` after the requested features are complete.
+- [x] Confirm the push succeeded and the remote contains the finished project.
+- [x] Report the repository link, local project path, startup command, and any remaining limitations.
+
+Review result: history contains source, tests, documentation, the original logo, and OFL font files. `data/`, `test-results/`, `dist/`, `node_modules/`, `.runtime/`, and `.env` are ignored. `.env.example` has defaults only. No audio, video, model weights, certificates, or credentials are tracked.
 
 ## 10. Provide this Markdown checklist
 
