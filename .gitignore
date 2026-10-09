@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.runtime/
+data/
+test-results/
+coverage/
+*.log
+secrets/
+certs/
+*.pem
+*.key
+*.pfx
+.DS_Store
