@@ -168,21 +168,22 @@ export function drawFrame(
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
     ctx.globalAlpha = ease(phase.local / 0.7);
     ctx.textAlign = "center";
-    text(ctx, "THANKS FOR", 500, 839, 37, "#ffffff99", 500);
-    text(ctx, "WATCHING", 500, 924, 75, "#fff", 800);
+    const center = WIDTH / 2;
+    text(ctx, "PLEASE", center, 620, 37, "#ffffff99", 500);
+    text(ctx, "SUBSCRIBE", center, 715, 78, "#fff", 800);
+    text(ctx, "FOR MORE SOUNDCLOUD FINDS", center, 778, 24, colors.secondary, 600);
     ctx.fillStyle = colors.accent;
-    ctx.fillRect(448, 974, 104, 3);
-    text(ctx, "SOUNDCLOUD FINDS", 500, 1044, 22, colors.secondary, 600);
-    const credit = wrap(
-      ctx,
-      `${track?.title || "Your next find"} — ${track?.artist || "Unknown artist"}`,
-      700,
-      23,
-      2,
+    ctx.fillRect(center - 52, 848, 104, 3);
+    text(ctx, "LOOK UP THIS SONG ON SOUNDCLOUD", center, 925, 24, "#ffffffb8", 600);
+    const song = wrap(ctx, track?.title || "Your next find", 800, 42, 2);
+    song.forEach((line, index) =>
+      text(ctx, line, center, 993 + index * 52, 42, "#fff", 700),
     );
-    credit.forEach((line, index) =>
-      text(ctx, line, 500, 1160 + index * 35, 23, "#ffffff80", 500),
+    const artist = wrap(ctx, `by ${track?.artist || "Unknown artist"}`, 800, 28, 2);
+    artist.forEach((line, index) =>
+      text(ctx, line, center, 1127 + index * 38, 28, "#ffffffb8", 500),
     );
+    text(ctx, "AND FOLLOW THE ARTIST THERE", center, 1250, 26, colors.secondary, 600);
     ctx.restore();
     return;
   }

@@ -1,6 +1,6 @@
 export const INTRO_DELAY = 2.5;
 export const LOGO_DURATION = 3.2;
-export const THANKS_DURATION = 3;
+export const THANKS_DURATION = 6;
 export const clamp = (value, min = 0, max = 1) =>
   Math.max(min, Math.min(max, value));
 export const ease = (value) => {

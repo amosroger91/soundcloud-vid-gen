@@ -10,7 +10,7 @@ Videos move between three artwork treatments: a layered record sleeve, an audio-
 
 Track metadata, song duration, volume number, and the visual mix determine the camera moves and scene order. **Remix visuals** creates a new arrangement; repeated previews and exports of the same settings stay consistent. Scene selection avoids adjacent repeats and fixed two- or three-scene loops.
 
-An original SoundCloud Finds logo arrives after 2.5 seconds of music, reappears after the song ends, and gives way to a three-second black “Thanks for watching” card. The editor shows one **Download full video** button only after the full-length MP4 finishes. Live previews and old short-clip exports have no download button. Descriptions can be copied; artwork and SRT sidecars remain available through the API. The app runs locally and requires no paid API key. Optionally, connect a TikTok account to send finished videos straight to your TikTok drafts.
+An original SoundCloud Finds logo arrives after 2.5 seconds of music, reappears after the song ends, and gives way to a six-second black “Please subscribe” card. The card names the song and artist and asks viewers to look up the song on SoundCloud and follow the artist there. The editor shows one **Download full video** button only after the full-length MP4 finishes. Live previews and old short-clip exports have no download button. Descriptions can be copied; artwork and SRT sidecars remain available through the API. The app runs locally and requires no paid API key. Optionally, connect a TikTok account to send finished videos straight to your TikTok drafts.
 
 ## Architecture
 
@@ -93,7 +93,7 @@ Tokens are stored in `data/tiktok/token.json` and refreshed automatically. **Dis
 ## Usage / HTTP API
 
 1. **Generate:** paste one public SoundCloud song URL and click the arrow beside the input. The app imports the whole song, finds lyrics, and renders it in one persisted job. You can reload the page while it works. Supported tracks are 3 seconds to 10 minutes, up to 100 MB.
-2. **Download:** when the job completes, use the single **Download full video** button. With branding enabled, the final duration is the full song plus 6.2 seconds for the logo outro and thank-you card. The intro overlays the music and never shifts the lyrics.
+2. **Download:** when the job completes, use the single **Download full video** button. With branding enabled, the final duration is the full song plus 9.2 seconds for the logo outro and a six-second card asking viewers to subscribe, find the song on SoundCloud, and follow the artist there. The intro overlays the music and never shifts the lyrics.
 3. **Optional edits:** expand **Optional style & lyric edits** to change the palette, motion, visual mix, branding, or lyric text. Apply lyric edits, then use **Update full video** to save a revised full-song export. Live previews never have download actions. Lyric times are seconds from the start of the song.
 4. **Post:** copy the generated description or send the completed video to TikTok drafts. Full-length exports are available in the history. Instrumental demo tracks finish without invented lyrics. A transcription failure stops the job and reports an error instead of silently exporting without lyrics.
 

@@ -769,18 +769,18 @@ export default function App() {
                   }));
                 }}
               />
-              <span>Animated intro, outro & thank-you ending</span>
+              <span>Animated intro, outro & subscribe ending</span>
             </label>
             <p className="section-copy">
               Music starts first. The logo arrives at 2.5s, returns after the
-              song, then fades to a black thank-you card.
+              song, then asks viewers to subscribe and follow the artist on SoundCloud.
             </p>
             <div className="timeline-strip">
               <span>MUSIC</span>
               <i />
               <span>LOGO OUTRO · 3.2s</span>
               <i />
-              <span>THANK YOU · 3s</span>
+              <span>SUBSCRIBE · 6s</span>
             </div>
           </section>
           <section className="export-panel">

@@ -8,11 +8,11 @@ test("music leads for 2.5 seconds before the intro logo appears", () => {
   assert.ok(timeline(3.7, 30).logo > 0.9);
   assert.equal(timeline(6, 30).logo, 0);
 });
-test("matching logo envelope appears after the clip ends and then a black thank-you card", () => {
+test("matching logo envelope appears after the clip ends and then a six-second subscribe card", () => {
   assert.equal(timeline(29.9, 30).stage, "music");
   assert.equal(timeline(31.5, 30).stage, "outro");
   assert.equal(timeline(34, 30).stage, "thanks");
-  assert.equal(totalDuration(30), 36.2);
+  assert.equal(totalDuration(30), 39.2);
   assert.ok(Math.abs(logoEnvelope(0.4) - logoEnvelope(2.8)) < 0.001);
 });
 test("intro does not add time to the song or subtitles", () => {

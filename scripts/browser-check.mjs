@@ -36,7 +36,7 @@ try {
   assert.equal(await page.getByRole("spinbutton", { name: "Clip length in seconds" }).count(), 0);
   await page.getByRole("textbox", { name: "Song link", exact: true }).fill("https://soundcloud.com/artist/whole-song");
   await page.locator(".customize-panel > summary").click();
-  await page.getByRole("checkbox", { name: "Animated intro, outro & thank-you ending" }).check();
+  await page.getByRole("checkbox", { name: "Animated intro, outro & subscribe ending" }).check();
   await page.locator(".customize-panel > summary").click();
   await page.getByRole("button", { name: "Generate full video", exact: true }).click();
   await page.locator(".job-progress").waitFor();

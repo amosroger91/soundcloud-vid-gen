@@ -19,7 +19,7 @@ export function videoDescription(track, options) {
     artwork,
     track.artworkCredit ? `Artwork credit: ${track.artworkCredit}` : null,
     "",
-    "Thanks for watching. Save this find for later.",
+    "Please subscribe for more SoundCloud Finds. Look up this song on SoundCloud and follow the artist there.",
     "#SoundCloudFinds #MusicDiscovery #NowPlaying #NewMusic",
   ]
     .filter((line) => line !== null)

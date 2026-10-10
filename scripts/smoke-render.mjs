@@ -14,7 +14,7 @@ const signal = new AbortController().signal;
 console.log("Creating original demo audio and artwork...");
 const track = await createDemo(id, () => {}, signal);
 console.log(
-  "Rendering an 8-second clip, logo animations, captions, and the thank-you ending...",
+  "Rendering an 8-second clip, logo animations, captions, and the subscribe ending...",
 );
 const options = {
   trackId: id,
