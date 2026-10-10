@@ -137,3 +137,14 @@ test("surfaces TikTok API errors from init", async () => {
     globalThis.fetch = realFetch;
   }
 });
+
+test("web redirects skip PKCE and authenticate with the client secret", () => {
+  process.env.TIKTOK_REDIRECT_URI = "https://finds.example.com/api/tiktok/callback/";
+  try {
+    const url = new URL(tiktok.authorizationUrl());
+    assert.equal(url.searchParams.get("redirect_uri"), process.env.TIKTOK_REDIRECT_URI);
+    assert.equal(url.searchParams.has("code_challenge"), false);
+  } finally {
+    delete process.env.TIKTOK_REDIRECT_URI;
+  }
+});

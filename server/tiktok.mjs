@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { open, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { dataDir, port } from "./config.mjs";
+import { dataDir, port, publicUrl } from "./config.mjs";
 import { readJson, saveJson } from "./storage.mjs";
 
 // TikTok Login Kit (desktop, PKCE) + Content Posting API in upload/inbox mode:
@@ -17,13 +17,18 @@ export const tiktokConfig = () => ({
   clientSecret: process.env.TIKTOK_CLIENT_SECRET?.trim() || "",
   redirectUri:
     process.env.TIKTOK_REDIRECT_URI?.trim() ||
-    `http://127.0.0.1:${port}/api/tiktok/callback/`,
+    (publicUrl
+      ? `${publicUrl}/api/tiktok/callback/`
+      : `http://127.0.0.1:${port}/api/tiktok/callback/`),
 });
 const configured = () => {
   const { clientKey, clientSecret } = tiktokConfig();
   return Boolean(clientKey && clientSecret);
 };
 
+// Desktop apps (loopback redirect) must use PKCE; web apps authenticate with the secret.
+const usesPkce = () =>
+  /^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(tiktokConfig().redirectUri);
 // TikTok's desktop flow expects the hex-encoded SHA-256 of the verifier.
 export const pkceChallenge = (verifier) =>
   createHash("sha256").update(verifier).digest("hex");
@@ -40,7 +45,8 @@ export function authorizationUrl() {
     if (value.expires < now) pending.delete(key);
   const state = randomBytes(16).toString("hex");
   const verifier = randomBytes(48).toString("base64url");
-  pending.set(state, { verifier, expires: now + 10 * 60 * 1000 });
+  const pkce = usesPkce();
+  pending.set(state, { verifier: pkce ? verifier : null, expires: now + 10 * 60 * 1000 });
   const { clientKey, redirectUri } = tiktokConfig();
   const url = new URL(AUTH_URL);
   url.search = new URLSearchParams({
@@ -49,8 +55,10 @@ export function authorizationUrl() {
     response_type: "code",
     redirect_uri: redirectUri,
     state,
-    code_challenge: pkceChallenge(verifier),
-    code_challenge_method: "S256",
+    ...(pkce && {
+      code_challenge: pkceChallenge(verifier),
+      code_challenge_method: "S256",
+    }),
   });
   return url.href;
 }
@@ -98,7 +106,7 @@ export async function completeAuthorization({ code, state, error }) {
     code,
     grant_type: "authorization_code",
     redirect_uri: redirectUri,
-    code_verifier: entry.verifier,
+    ...(entry.verifier && { code_verifier: entry.verifier }),
   });
   if (!token.scope?.split(",").includes("video.upload"))
     throw new Error(

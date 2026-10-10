@@ -1,0 +1,17 @@
+# Runs on the server from /opt/finds-studio (source checked out in ./src).
+services:
+  finds-studio:
+    build: ./src
+    image: finds-studio:latest
+    container_name: finds-studio
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PUBLIC_URL: https://finds.wellspringstudiollc.com
+    ports:
+      - "127.0.0.1:4318:4317"
+    volumes:
+      - ./data:/data
+      - ./models:/models
+    cpus: 3
+    mem_limit: 2g

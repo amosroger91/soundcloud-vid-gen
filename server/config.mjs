@@ -19,6 +19,8 @@ export const ytdlpPath =
   path.join(runtimeDir, process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
 export const host = process.env.HOST || "127.0.0.1";
 export const port = Number(process.env.PORT || 4317);
+// Public origin when deployed behind a reverse proxy, e.g. https://finds.example.com
+export const publicUrl = process.env.PUBLIC_URL?.replace(/\/+$/, "") || "";
 export const FPS = 30;
 export const SAMPLE_RATE = 16000;
 export const MAX_TRACK_SECONDS = 600;

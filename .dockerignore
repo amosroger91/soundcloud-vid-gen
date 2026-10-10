@@ -1,0 +1,8 @@
+node_modules
+dist
+data
+.runtime
+.env
+.env.*
+.git
+test-results

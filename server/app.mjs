@@ -16,6 +16,8 @@ import {
   ffmpegPath,
   ffprobePath,
   host,
+  publicUrl,
+  root,
   runtimeDir,
 } from "./config.mjs";
 import {
@@ -31,6 +33,7 @@ export async function createApp({ jobs = new Jobs() } = {}) {
   app.disable("x-powered-by");
   app.use((req, res, next) => {
     const allowed = new Set(["localhost", "127.0.0.1", "[::1]", host]);
+    if (publicUrl) allowed.add(new URL(publicUrl).hostname);
     if (!allowed.has(req.hostname))
       return res
         .status(403)
@@ -41,7 +44,8 @@ export async function createApp({ jobs = new Jobs() } = {}) {
     if (
       origin &&
       !["GET", "HEAD"].includes(req.method) &&
-      origin !== `${req.protocol}://${req.get("host")}`
+      origin !== `${req.protocol}://${req.get("host")}` &&
+      origin !== publicUrl
     )
       return res
         .status(403)
@@ -49,6 +53,8 @@ export async function createApp({ jobs = new Jobs() } = {}) {
     next();
   });
   app.use(express.json({ limit: "256kb" }));
+  // Public homepage, privacy policy, terms, and TikTok URL verification file.
+  app.use("/site", express.static(path.join(root, "docs")));
   app.get("/api/health", async (_req, res) => {
     const available = async (file) =>
       access(file).then(
