@@ -1,7 +1,7 @@
 import { MAX_CAPTION_LINES } from "./limits.mjs";
 
 export function normalizeWords(chunks, duration) {
-  return (chunks || [])
+  const words = (chunks || [])
     .flatMap((chunk) => {
       const text = String(chunk.text || "")
         .replace(/[\u0000-\u001f\u200b-\u200f\u202a-\u202e]/g, "")
@@ -26,6 +26,34 @@ export function normalizeWords(chunks, duration) {
       ];
     })
     .sort((a, b) => a.start - b.start);
+
+  // Recognition windows can overlap, and several words can share an onset.
+  // Reconcile those timestamps before grouping so an earlier word cannot
+  // extend beyond its cue or collide with the next cue. Keep valid timings
+  // and all lyric text; only tied onsets need an estimated split.
+  const normalized = [];
+  for (let first = 0; first < words.length;) {
+    const start = words[first].start;
+    let after = first + 1;
+    let end = words[first].end;
+    while (after < words.length && words[after].start === start) {
+      end = Math.max(end, words[after].end);
+      after++;
+    }
+    end = Math.min(end, words[after]?.start ?? duration);
+    const count = after - first;
+    for (let index = 0; index < count; index++) {
+      normalized.push({
+        ...words[first + index],
+        start: start + ((end - start) * index) / count,
+        end: index === count - 1
+          ? end
+          : start + ((end - start) * (index + 1)) / count,
+      });
+    }
+    first = after;
+  }
+  return normalized;
 }
 export function groupWords(words) {
   const cues = [];
