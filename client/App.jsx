@@ -163,6 +163,8 @@ export default function App() {
   const [language, setLanguage] = useState("auto");
   const [captionMessage, setCaptionMessage] = useState("");
   const [copied, setCopied] = useState(false);
+  const [tiktok, setTiktok] = useState(null);
+  const [tiktokMessage, setTiktokMessage] = useState("");
   const audioRef = useRef(null);
   const playbackRef = useRef({
     time: 0,
@@ -198,6 +200,16 @@ export default function App() {
     api("/api/health")
       .then(setHealth)
       .catch((error) => setError(error.message));
+    api("/api/tiktok/status")
+      .then(setTiktok)
+      .catch(() => {});
+    const connected = new URLSearchParams(location.search).get("tiktok");
+    if (connected) {
+      if (connected === "connected")
+        setTiktokMessage("TikTok connected. Render a video, then send it to your drafts.");
+      else setError(connected);
+      history.replaceState(null, "", location.pathname);
+    }
     api("/api/jobs")
       .then((jobs) => {
         setExports(
@@ -246,6 +258,12 @@ export default function App() {
               ...current,
               captions: next.result.cues,
             }));
+          } else if (next.type === "tiktok") {
+            setTiktokMessage(
+              next.result.inbox
+                ? "Sent! Open the TikTok app inbox notification to finish your post. The caption is on your clipboard."
+                : "Uploaded. TikTok is still processing it; the inbox notification should arrive shortly.",
+            );
           } else await loadTrack(next.result);
         } else if (next.status === "failed") setError(next.error);
         else if (active(next)) timer = setTimeout(poll, 800);
@@ -350,6 +368,28 @@ export default function App() {
           : "Captions cleared. This clip will export without lyrics.",
       );
       setError("");
+    } catch (error) {
+      setError(error.message);
+    }
+  }
+  async function sendToTiktok() {
+    setError("");
+    setTiktokMessage("");
+    await navigator.clipboard.writeText(result.description).catch(() => {});
+    try {
+      setJob(
+        await api("/api/tiktok/drafts", {
+          renderId: result.videoUrl.split("/")[3],
+        }),
+      );
+    } catch (error) {
+      setError(error.message);
+    }
+  }
+  async function disconnectTiktok() {
+    try {
+      setTiktok(await api("/api/tiktok/disconnect", {}));
+      setTiktokMessage("");
     } catch (error) {
       setError(error.message);
     }
@@ -853,6 +893,39 @@ export default function App() {
                 <a className="text-button" href={result.captionsUrl}>
                   Subtitles .srt
                 </a>
+              </div>
+              <div className="tiktok-panel">
+                {!tiktok?.configured ? (
+                  <p className="caption-message">
+                    To send videos to TikTok drafts, add TIKTOK_CLIENT_KEY and
+                    TIKTOK_CLIENT_SECRET to .env and restart the app.
+                  </p>
+                ) : !tiktok.connected ? (
+                  <a className="secondary-button" href="/api/tiktok/connect">
+                    Connect TikTok <ArrowRight size={14} />
+                  </a>
+                ) : (
+                  <div className="caption-actions">
+                    <button
+                      className="secondary-button"
+                      onClick={sendToTiktok}
+                      disabled={busy}
+                    >
+                      Send to TikTok drafts <ArrowRight size={14} />
+                    </button>
+                    <span className="section-note">
+                      {tiktok.displayName ? `@${tiktok.displayName}` : "Connected"}
+                    </span>
+                    <button className="text-button" onClick={disconnectTiktok}>
+                      Disconnect
+                    </button>
+                  </div>
+                )}
+                {tiktokMessage && (
+                  <p className="caption-message" role="status">
+                    {tiktokMessage}
+                  </p>
+                )}
               </div>
             </section>
           )}

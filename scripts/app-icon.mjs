@@ -1,0 +1,48 @@
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
+import { root } from "../server/config.mjs";
+import { createCanvas } from "../server/canvas.mjs";
+import { pulseHeights } from "../shared/logo.mjs";
+
+// 1024 × 1024 store icon: the logo mark alone, weighted to stay legible when small.
+const size = 1024;
+const accent = "#ff7546";
+const canvas = createCanvas(size, size);
+const ctx = canvas.getContext("2d");
+const background = ctx.createRadialGradient(512, 430, 40, 512, 512, 760);
+background.addColorStop(0, "#2a1712");
+background.addColorStop(0.55, "#120d0c");
+background.addColorStop(1, "#070707");
+ctx.fillStyle = background;
+ctx.fillRect(0, 0, size, size);
+ctx.translate(size / 2, size / 2);
+ctx.scale(2.05, 2.05);
+ctx.lineCap = "round";
+ctx.strokeStyle = `${accent}55`;
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.arc(0, 0, 196, 0, Math.PI * 2);
+ctx.stroke();
+ctx.strokeStyle = accent;
+ctx.lineWidth = 13;
+ctx.beginPath();
+ctx.arc(0, 0, 170, -Math.PI / 3, -Math.PI / 3 + 1.84 * Math.PI);
+ctx.stroke();
+ctx.fillStyle = accent;
+const bar = 26;
+const gap = 12;
+const left = -((pulseHeights.length * bar + (pulseHeights.length - 1) * gap) / 2);
+pulseHeights.forEach((height, index) => {
+  const h = height * 1.25;
+  ctx.beginPath();
+  ctx.roundRect(left + index * (bar + gap), -h / 2, bar, h, bar / 2);
+  ctx.fill();
+});
+ctx.save();
+ctx.translate(170 * Math.cos(-Math.PI / 3 - 0.16), 170 * Math.sin(-Math.PI / 3 - 0.16));
+ctx.rotate(Math.PI / 4);
+ctx.fillRect(-14, -14, 28, 28);
+ctx.restore();
+const file = path.join(root, "assets", "brand", "app-icon-1024.png");
+await writeFile(file, await canvas.encode("png"));
+console.log(`Saved ${file}`);

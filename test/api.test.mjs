@@ -55,3 +55,12 @@ test("cannot download incomplete or nonexistent exports", async () => {
     .get("/api/renders/310b3a1c-9693-4a5e-9eec-c3da41060270/download")
     .expect(404);
 });
+test("TikTok drafts require a finished render", async () => {
+  const status = await request(app).get("/api/tiktok/status").expect(200);
+  assert.equal(typeof status.body.configured, "boolean");
+  await request(app)
+    .post("/api/tiktok/drafts")
+    .send({ renderId: "310b3a1c-9693-4a5e-9eec-c3da41060270" })
+    .expect(404);
+  await request(app).post("/api/tiktok/drafts").send({}).expect(400);
+});

@@ -6,7 +6,7 @@
 
 Paste a public SoundCloud song link, select a clip, and generate a **1080 × 1920, 30 fps MP4**. The video shows the cover art, title, and artist, with an audio-driven frequency spectrum and waveform. Local speech-to-text can generate timed lyric captions; words highlight as the vocals play, and you can review and edit the transcript before export.
 
-An original SoundCloud Finds logo arrives after 2.5 seconds of music, reappears after the selected clip ends, and gives way to a three-second black “Thanks for watching” card. Every export includes a description with artist/source/artwork attribution, downloadable cover art when available, and an SRT subtitle file. The app runs locally, requires no paid API key, and does not post to TikTok automatically.
+An original SoundCloud Finds logo arrives after 2.5 seconds of music, reappears after the selected clip ends, and gives way to a three-second black “Thanks for watching” card. Every export includes a description with artist/source/artwork attribution, downloadable cover art when available, and an SRT subtitle file. The app runs locally and requires no paid API key. Optionally, connect a TikTok account to send finished videos straight to your TikTok drafts.
 
 ## Architecture
 
@@ -72,9 +72,19 @@ Optionally copy `.env.example` to `.env`. Every setting has a default; no API to
 | `FFPROBE_PATH`    | No       | `ffprobe-static` binary; custom probe executable. Rerun setup after changing.                                                                |
 | `WHISPER_MODEL`   | No       | `onnx-community/whisper-base_timestamped`; a compatible multilingual model with word-timestamp outputs and fp32 encoder / q8 merged decoder. |
 | `MODEL_CACHE_DIR` | No       | `~/.cache/soundcloud-vid-gen/models`; use a **local disk**, especially on Windows. ONNX model loading can fail on mapped network drives.     |
+| `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | No | Your TikTok developer app credentials; enables **Send to TikTok drafts**. See below. |
 | `APP_URL`         | No       | `http://127.0.0.1:4317`; browser/workflow verification target only.                                                                          |
 
 Stop imports and renders before updating the runtime. The installed yt-dlp version is recorded in `.runtime/version.txt`. Rerun `npm run setup` when SoundCloud changes require a newer importer.
+
+## TikTok drafts
+
+1. At developers.tiktok.com, create an app with **Login Kit** (Desktop platform) and the **Content Posting API**, and request the `user.info.basic` and `video.upload` scopes.
+2. Register the redirect URI `http://127.0.0.1:4317/api/tiktok/callback/`. Change the port if you changed `PORT`, or set `TIKTOK_REDIRECT_URI`.
+3. Put the client key and secret in `.env` and restart the app.
+4. After a render, click **Connect TikTok** once, then **Send to TikTok drafts**. The MP4 is uploaded in chunks to your TikTok inbox, and the description is copied to your clipboard. Open the TikTok notification, paste the caption, and post.
+
+Tokens are stored in `data/tiktok/token.json` and refreshed automatically. **Disconnect** revokes them. Lyric subtitles are burned into the video; TikTok's API does not accept `.srt` files. TikTok limits how many drafts can be pending per 24 hours.
 
 ## Usage / HTTP API
 
@@ -104,6 +114,10 @@ Stop imports and renders before updating the runtime. The installed yt-dlp versi
 | GET    | `/api/renders/:id/poster`      | Poster JPEG.                                                                                                                      |
 | GET    | `/api/renders/:id/description` | Generated `description.txt`.                                                                                                      |
 | GET    | `/api/renders/:id/captions`    | `lyrics.srt`; empty when there are no captions.                                                                                   |
+| GET    | `/api/tiktok/status`           | Whether TikTok is configured and connected.                                                                                       |
+| GET    | `/api/tiktok/connect`          | Starts TikTok sign-in (PKCE).                                                                                                     |
+| POST   | `/api/tiktok/drafts`           | Upload `{ "renderId": "uuid" }` to the TikTok inbox as a draft job.                                                              |
+| POST   | `/api/tiktok/disconnect`       | Revoke and delete the stored TikTok token.                                                                                        |
 | GET    | `/api/renders/:id/artwork`     | Downloadable `cover-art.jpg`, when available.                                                                                     |
 
 Creation endpoints return `202` and a job ID. Poll until `status` is `complete`, `failed`, or `cancelled`. Caption cues contain `{ start, end, text, words? }`; optional words use the same fields. Times must be ordered and within the clip. Invalid input returns `400`, missing assets `404`, and a full queue `429`.

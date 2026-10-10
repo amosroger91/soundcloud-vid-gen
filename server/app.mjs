@@ -18,6 +18,12 @@ import {
   host,
   runtimeDir,
 } from "./config.mjs";
+import {
+  authorizationUrl,
+  completeAuthorization,
+  disconnect,
+  tiktokStatus,
+} from "./tiktok.mjs";
 
 export async function createApp({ jobs = new Jobs() } = {}) {
   await jobs.init();
@@ -102,6 +108,39 @@ export async function createApp({ jobs = new Jobs() } = {}) {
       throw error;
     }
     res.status(202).json(await jobs.add("render", options));
+  });
+  app.get("/api/tiktok/status", async (_req, res) =>
+    res.json(await tiktokStatus()),
+  );
+  app.get("/api/tiktok/connect", (_req, res) =>
+    res.redirect(authorizationUrl()),
+  );
+  app.get("/api/tiktok/callback", async (req, res) => {
+    try {
+      await completeAuthorization({
+        code: String(req.query.code || ""),
+        state: String(req.query.state || ""),
+        error: req.query.error && String(req.query.error),
+      });
+      res.redirect("/?tiktok=connected");
+    } catch (error) {
+      res.redirect(`/?tiktok=${encodeURIComponent(error.message)}`);
+    }
+  });
+  app.post("/api/tiktok/disconnect", async (_req, res) => {
+    await disconnect();
+    res.json(await tiktokStatus());
+  });
+  app.post("/api/tiktok/drafts", async (req, res) => {
+    const renderId = uuidSchema.parse(req.body?.renderId);
+    const render = jobs.jobs.get(renderId);
+    if (render?.type !== "render" || render.status !== "complete")
+      return res.status(404).json({ error: "This video is not ready." });
+    if (!(await tiktokStatus()).connected)
+      return res
+        .status(400)
+        .json({ error: "Connect your TikTok account first." });
+    res.status(202).json(await jobs.add("tiktok", { renderId }));
   });
   app.get("/api/tracks/:id", async (req, res) =>
     res.json(await getTrack(req.params.id)),

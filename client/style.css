@@ -1076,3 +1076,12 @@ select {
 .export-history-item:hover {
   border-color: var(--blue);
 }
+.tiktok-panel {
+  margin-top: 17px;
+  border-top: 1px solid var(--line);
+  padding-top: 15px;
+}
+.tiktok-panel a.secondary-button {
+  text-decoration: none;
+  width: fit-content;
+}

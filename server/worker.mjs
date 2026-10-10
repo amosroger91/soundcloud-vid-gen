@@ -1,6 +1,7 @@
 import { importTrack, createDemo } from "./media.mjs";
 import { renderVideo } from "./render.mjs";
 import { rm } from "node:fs/promises";
+import path from "node:path";
 import { trackDir, renderDir } from "./storage.mjs";
 
 const controller = new AbortController();
@@ -23,11 +24,19 @@ process.on("message", async (message) => {
             ).transcribeTrack(job.input, report, controller.signal)
           : job.type === "demo"
             ? await createDemo(job.id, report, controller.signal)
-            : await renderVideo(job.id, job.input, report, controller.signal);
+            : job.type === "tiktok"
+              ? await (
+                  await import("./tiktok.mjs")
+                ).uploadDraft(
+                  path.join(renderDir(job.input.renderId), "soundcloud-finds.mp4"),
+                  report,
+                  controller.signal,
+                )
+              : await renderVideo(job.id, job.input, report, controller.signal);
     controller.signal.throwIfAborted();
     process.send?.({ type: "complete", result }, () => process.disconnect());
   } catch (error) {
-    if (job.type !== "transcribe")
+    if (!["transcribe", "tiktok"].includes(job.type))
       await rm(job.type === "render" ? renderDir(job.id) : trackDir(job.id), {
         recursive: true,
         force: true,
