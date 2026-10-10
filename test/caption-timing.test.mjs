@@ -93,7 +93,8 @@ test("lyrics are drawn in the reserved slot and not over the artwork", () => {
   const band = frameLayout(true).lyric;
   const art = frameLayout(true).art;
   const active = scene(1.2, cues);
-  const gap = scene(0.2, cues);
+  // Compare the same instant with a future cue: artwork now intentionally moves.
+  const gap = scene(1.2, [{ start: 6, end: 7, text: "Future caption" }]);
   const artPatch = {
     x: art.x - 30,
     y: art.y - 30,

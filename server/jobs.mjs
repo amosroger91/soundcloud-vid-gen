@@ -101,6 +101,7 @@ export class Jobs {
       if (message.type === "progress") {
         job.progress = message.progress;
         job.message = message.message;
+        if (message.stage) job.stage = message.stage;
       }
       if (message.type === "complete") {
         job.status = "complete";
@@ -128,12 +129,14 @@ export class Jobs {
       () => {
         if (terminal.has(job.status)) return;
         job.status = "failed";
-        job.error = "The job exceeded 20 minutes. Try a shorter clip.";
+        job.error = "The job exceeded its processing time limit. Please try again.";
         child.send({ type: "cancel" });
-        if (job.type === "transcribe") child.kill();
+        if (job.type === "transcribe" || (job.type === "generate" && job.stage === "transcribe")) child.kill();
         this.save(job).catch(console.error);
       },
-      20 * 60 * 1000,
+      job.type === "generate" ? 2 * 60 * 60 * 1000 :
+        job.type === "render" ? Math.max(20 * 60 * 1000, (job.input.duration || 0) * 6000 + 60000) :
+        job.type === "transcribe" ? Math.max(20 * 60 * 1000, (job.input.duration || 0) * 6000) : 20 * 60 * 1000,
     );
     child.once("exit", () => clearTimeout(timeout));
   }
@@ -145,7 +148,7 @@ export class Jobs {
     if (this.active?.job.id === id) {
       this.active.child.send({ type: "cancel" });
       // Native inference can be busy in ONNX; terminating this isolated worker cancels it immediately.
-      if (job.type === "transcribe") this.active.child.kill();
+      if (job.type === "transcribe" || (job.type === "generate" && job.stage === "transcribe")) this.active.child.kill();
     }
     await this.save(job);
     return job;

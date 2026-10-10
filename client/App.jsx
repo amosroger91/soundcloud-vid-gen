@@ -13,6 +13,7 @@ import {
   Play,
   Radio,
   RotateCcw,
+  Shuffle,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import {
 } from "../shared/composition.mjs";
 import { totalDuration, timeline } from "../shared/timeline.mjs";
 import { cuesToEditor, parseEditor } from "../shared/captions.mjs";
+import { MOTION_STYLES } from "../shared/direction.mjs";
 
 async function api(url, body, signal) {
   const response = await fetch(url, {
@@ -37,6 +39,9 @@ async function api(url, body, signal) {
   return json;
 }
 const active = (job) => job && ["queued", "running"].includes(job.status);
+const fullVideo = (job) =>
+  ["render", "generate"].includes(job?.type) &&
+  job.status === "complete" && job.result?.fullLength === true;
 
 function Preview({
   track,
@@ -120,6 +125,8 @@ function Preview({
     options.start,
     options.duration,
     options.theme,
+    options.motion,
+    options.variation,
     options.episode,
     options.branded,
     options.captions,
@@ -146,7 +153,7 @@ export default function App() {
   const [exports, setExports] = useState([]);
   const [error, setError] = useState("");
   const [health, setHealth] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [playTime, setPlayTime] = useState(0);
   const [result, setResult] = useState(null);
@@ -154,6 +161,8 @@ export default function App() {
     start: 0,
     duration: 30,
     theme: "ember",
+    motion: "dynamic",
+    variation: 0,
     episode: "001",
     branded: true,
     captions: [],
@@ -175,26 +184,46 @@ export default function App() {
   const busy = loading || active(job);
   const captionDirty = captionText !== cuesToEditor(options.captions);
 
-  async function loadTrack(next) {
+  async function loadTrack(next, restored = {}) {
     const data = await api(next.analysisUrl);
     audioRef.current?.pause();
     setPlaying(false);
     playbackRef.current.time = 0;
     playbackRef.current.playing = false;
-    setTranscript(null);
-    setCaptionText("");
-    setCaptionMessage("");
+    const captions = restored.captions || [];
+    setTranscript(restored.captions ? { cues: captions } : null);
+    setCaptionText(cuesToEditor(captions));
+    setCaptionMessage(restored.transcriptionNote || "");
     setTrack(next);
     setAnalysis(data);
     setResult(null);
     setPlayTime(0);
     setOptions((current) => ({
       ...current,
-      captions: [],
+      ...restored.options,
+      captions,
       start: 0,
-      duration: Math.min(30, Math.floor(next.duration * 100) / 100),
+      duration: next.duration,
     }));
     localStorage.setItem("finds-track", next.id);
+  }
+  async function showVideo(completed) {
+    if (!fullVideo(completed)) return;
+    const video = completed.result;
+    const source = video.track || await api(`/api/tracks/${completed.input.trackId}`);
+    await loadTrack(source, {
+      options: completed.input,
+      captions: video.captions || completed.input.captions || [],
+      transcriptionNote: video.transcriptionNote,
+    });
+    setLanguage(completed.input.language || "auto");
+    setResult(video);
+    setCopied(false);
+    localStorage.setItem("finds-video", completed.id);
+  }
+  function videoSettings() {
+    const { theme, motion, variation, episode, branded } = options;
+    return { theme, motion, variation, episode: episode || "001", branded, language };
   }
   useEffect(() => {
     api("/api/health")
@@ -206,26 +235,31 @@ export default function App() {
     const connected = new URLSearchParams(location.search).get("tiktok");
     if (connected) {
       if (connected === "connected")
-        setTiktokMessage("TikTok connected. Render a video, then send it to your drafts.");
+        setTiktokMessage("TikTok connected. Your finished video can be sent to your drafts.");
       else setError(connected);
       history.replaceState(null, "", location.pathname);
     }
     api("/api/jobs")
-      .then((jobs) => {
-        setExports(
-          jobs.filter(
-            (job) => job.type === "render" && job.status === "complete",
-          ),
-        );
+      .then(async (jobs) => {
+        const completed = jobs.filter(fullVideo);
+        setExports(completed);
         const running = jobs.find(active);
-        if (running) setJob(running);
+        if (running) {
+          setJob(running);
+          return;
+        }
+        const savedVideo = localStorage.getItem("finds-video");
+        const selected = completed.find((item) => item.id === savedVideo) || completed[0];
+        if (selected) await showVideo(selected);
+        else {
+          const savedTrack = localStorage.getItem("finds-track");
+          if (savedTrack) await api(`/api/tracks/${savedTrack}`)
+            .then((saved) => loadTrack(saved))
+            .catch(() => localStorage.removeItem("finds-track"));
+        }
       })
-      .catch((error) => setError(error.message));
-    const saved = localStorage.getItem("finds-track");
-    if (saved)
-      api(`/api/tracks/${saved}`)
-        .then(loadTrack)
-        .catch(() => localStorage.removeItem("finds-track"));
+      .catch((error) => setError(error.message))
+      .finally(() => setLoading(false));
   }, []);
   useEffect(() => {
     if (!active(job)) return;
@@ -240,33 +274,26 @@ export default function App() {
           controller.signal,
         );
         if (cancelled) return;
-        setJob(next);
         if (next.status === "complete") {
-          if (next.type === "render") {
-            setResult(next.result);
+          if (fullVideo(next)) {
+            await showVideo(next);
+            if (cancelled) return;
             setExports((current) =>
               [next, ...current.filter((item) => item.id !== next.id)].slice(
                 0,
                 6,
               ),
             );
-          } else if (next.type === "transcribe") {
-            setTranscript(next.result);
-            setCaptionText(cuesToEditor(next.result.cues));
-            setCaptionMessage(next.result.note);
-            setOptions((current) => ({
-              ...current,
-              captions: next.result.cues,
-            }));
           } else if (next.type === "tiktok") {
             setTiktokMessage(
               next.result.inbox
                 ? "Sent! Open the TikTok app inbox notification to finish your post. The caption is on your clipboard."
                 : "Uploaded. TikTok is still processing it; the inbox notification should arrive shortly.",
             );
-          } else await loadTrack(next.result);
+          } else if (["import", "demo"].includes(next.type)) await loadTrack(next.result);
         } else if (next.status === "failed") setError(next.error);
         else if (active(next)) timer = setTimeout(poll, 800);
+        if (!cancelled) setJob(next);
       } catch (error) {
         if (!cancelled) {
           setError(`Could not check progress: ${error.message}`);
@@ -296,28 +323,6 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }
-  function updateClip(patch) {
-    audioRef.current?.pause();
-    setPlaying(false);
-    playbackRef.current.playing = false;
-    playbackRef.current.time = 0;
-    const next = { ...options, ...patch };
-    next.duration = Math.max(
-      3,
-      Math.min(next.duration, track?.duration || 60, 60),
-    );
-    next.start = Math.max(
-      0,
-      Math.min(next.start, (track?.duration || 60) - next.duration),
-    );
-    next.captions = [];
-    setTranscript(null);
-    setCaptionText("");
-    setCaptionMessage("");
-    setOptions(next);
-    setPlayTime(0);
-    if (audioRef.current) audioRef.current.currentTime = next.start;
   }
   async function togglePlay() {
     const audio = audioRef.current;
@@ -354,6 +359,12 @@ export default function App() {
       audioRef.current.currentTime =
         options.start + Math.min(value, options.duration);
   }
+  function updateVisuals(patch) {
+    if (result || playbackRef.current.time >= options.duration)
+      seekPreview(Math.min(1.5, options.duration / 2));
+    setResult(null);
+    setOptions((current) => ({ ...current, ...patch }));
+  }
   function applyCaptions() {
     try {
       const captions = parseEditor(
@@ -361,11 +372,12 @@ export default function App() {
         options.duration,
         transcript?.cues || [],
       );
-      setOptions((current) => ({ ...current, captions }));
+      updateVisuals({ captions });
+      setTranscript({ cues: captions });
       setCaptionMessage(
         captions.length
-          ? "Caption edits applied to the preview and next export."
-          : "Captions cleared. This clip will export without lyrics.",
+          ? "Lyrics updated. Use Update full video to save your changes."
+          : "Lyrics cleared. Use Update full video to save your changes.",
       );
       setError("");
     } catch (error) {
@@ -400,7 +412,7 @@ export default function App() {
       setCopied(true);
     } catch {
       setError(
-        "Clipboard access was unavailable. Select the description text or download it instead.",
+        "Clipboard access was unavailable. Select and copy the description text instead.",
       );
     }
   }
@@ -440,7 +452,7 @@ export default function App() {
             className="source-panel"
             onSubmit={(event) => {
               event.preventDefault();
-              startJob("/api/imports", { url });
+              startJob("/api/videos", { url, ...videoSettings() });
             }}
           >
             <div className="section-heading">
@@ -463,9 +475,9 @@ export default function App() {
               <button
                 type="submit"
                 disabled={busy || !url || health?.ready === false}
-                aria-label="Import track"
+                aria-label="Generate full video"
               >
-                {loading ? (
+                {busy ? (
                   <LoaderCircle className="spin" size={19} />
                 ) : (
                   <ArrowRight size={20} />
@@ -473,17 +485,37 @@ export default function App() {
               </button>
             </div>
             <div className="source-help">
-              <span>Audio + cover art, pulled together.</span>
+              <span>Full song + automatic lyrics + finished video.</span>
               <button
                 type="button"
                 className="text-button"
                 disabled={busy}
-                onClick={() => startJob("/api/demo", {})}
+                onClick={() => startJob("/api/videos", { demo: true, ...videoSettings() })}
               >
                 Try a demo <ChevronRight size={13} />
               </button>
             </div>
           </form>
+          {active(job) && (
+            <div className="job-progress" role="status" aria-live="polite">
+              <div>
+                <span>{job.message}</span>
+                <strong>{job.progress}%</strong>
+              </div>
+              <progress max="100" value={job.progress} />
+              <button
+                className="text-button"
+                onClick={() =>
+                  api(`/api/jobs/${job.id}/cancel`, {})
+                    .then(setJob)
+                    .catch((error) => setError(error.message))
+                }
+              >
+                Cancel job
+              </button>
+            </div>
+          )}
+
           {health && !health.ready && (
             <div className="notice">
               Media tools need setup. Run <code>npm run setup</code> in the
@@ -523,79 +555,15 @@ export default function App() {
               </span>
             </div>
           )}
+          <details className="customize-panel">
+            <summary>Optional style & lyric edits</summary>
           <section className="clip-panel">
             <div className="section-heading">
               <span className="step-number">02</span>
               <h2>Make it yours</h2>
               <SlidersHorizontal size={16} />
             </div>
-            <fieldset disabled={!track || busy}>
-              <div className="label-row">
-                <label htmlFor="start">Start at</label>
-                <span className="mono">
-                  {clock(options.start)}{" "}
-                  <span className="muted">/ {clock(track?.duration || 0)}</span>
-                </span>
-              </div>
-              <input
-                id="start"
-                type="range"
-                min="0"
-                max={Math.max(0, (track?.duration || 30) - options.duration)}
-                step="0.1"
-                value={options.start}
-                onChange={(event) =>
-                  updateClip({ start: Number(event.target.value) })
-                }
-              />
-              <div className="clip-values">
-                <label>
-                  Start, seconds
-                  <input
-                    aria-label="Start in seconds"
-                    type="number"
-                    min="0"
-                    max={Math.max(
-                      0,
-                      (track?.duration || 30) - options.duration,
-                    )}
-                    step="0.1"
-                    value={Number(options.start.toFixed(1))}
-                    onChange={(event) =>
-                      updateClip({ start: Number(event.target.value) })
-                    }
-                  />
-                </label>
-                <label>
-                  Length, seconds
-                  <input
-                    aria-label="Clip length in seconds"
-                    type="number"
-                    min="3"
-                    max={Math.min(60, track?.duration || 60)}
-                    step="0.1"
-                    value={options.duration}
-                    onChange={(event) =>
-                      updateClip({ duration: Number(event.target.value) })
-                    }
-                  />
-                </label>
-              </div>
-              <div className="duration-options">
-                {[15, 30, 60].map((duration) => (
-                  <button
-                    type="button"
-                    key={duration}
-                    className={options.duration === duration ? "selected" : ""}
-                    disabled={!track || duration > track.duration || busy}
-                    onClick={() => updateClip({ duration })}
-                  >
-                    {duration}s
-                  </button>
-                ))}
-                <span>Choose the part that hits.</span>
-              </div>
-            </fieldset>
+            <p className="section-copy">The entire song is included{track ? ` · ${clock(track.duration)}` : ""}. These visual settings are optional.</p>
             <div className="style-controls">
               <div>
                 <label>Visual palette</label>
@@ -611,7 +579,7 @@ export default function App() {
                         options.theme === id ? "swatch active" : "swatch"
                       }
                       onClick={() =>
-                        setOptions((current) => ({ ...current, theme: id }))
+                        updateVisuals({ theme: id })
                       }
                     >
                       <i style={{ background: theme.accent }} />
@@ -628,12 +596,7 @@ export default function App() {
                   disabled={busy}
                   maxLength="3"
                   inputMode="numeric"
-                  onChange={(event) =>
-                    setOptions((current) => ({
-                      ...current,
-                      episode: event.target.value.replace(/\D/g, ""),
-                    }))
-                  }
+                  onChange={(event) => updateVisuals({ episode: event.target.value.replace(/\D/g, "") })}
                   onBlur={() =>
                     setOptions((current) => ({
                       ...current,
@@ -643,6 +606,57 @@ export default function App() {
                 />
               </label>
             </div>
+            <fieldset className="motion-controls" disabled={busy}>
+              <legend>Motion direction</legend>
+              <div className="motion-options">
+                {Object.entries(MOTION_STYLES).map(([id, style]) => (
+                  <label
+                    key={id}
+                    className={
+                      options.motion === id
+                        ? "motion-option active"
+                        : "motion-option"
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name="motion"
+                      value={id}
+                      checked={options.motion === id}
+                      aria-label={style.name}
+                      aria-describedby={`motion-${id}-description`}
+                      onChange={() => updateVisuals({ motion: id })}
+                    />
+                    <span>
+                      <strong>{style.name}</strong>
+                      <small id={`motion-${id}-description`}>
+                        {style.description}
+                      </small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="remix-controls">
+                <span className="mix-label" aria-live="polite" aria-atomic="true">
+                  Mix {String(options.variation + 1).padStart(2, "0")}
+                </span>
+                <button
+                  className="remix-button"
+                  type="button"
+                  aria-describedby="remix-help"
+                  onClick={() =>
+                    updateVisuals({
+                      variation: (options.variation + 1) % 10000,
+                    })
+                  }
+                >
+                  <Shuffle size={14} aria-hidden="true" /> Remix visuals
+                </button>
+              </div>
+              <p id="remix-help" className="motion-help">
+                A fresh sequence of scenes and camera moves for this track.
+              </p>
+            </fieldset>
           </section>
           <section className="lyrics-panel">
             <div className="section-heading">
@@ -651,8 +665,7 @@ export default function App() {
               <span className="section-note">WORD BY WORD</span>
             </div>
             <p className="section-copy">
-              Pull the words from your selected clip. Watch them light up with
-              the vocals.
+              Lyrics are generated automatically for the whole song. You can review or edit them after the video finishes.
             </p>
             <div className="transcribe-controls">
               <label>
@@ -681,20 +694,7 @@ export default function App() {
                   ))}
                 </select>
               </label>
-              <button
-                className="secondary-button"
-                disabled={!track || busy}
-                onClick={() =>
-                  startJob("/api/transcriptions", {
-                    trackId: track.id,
-                    start: options.start,
-                    duration: options.duration,
-                    language,
-                  })
-                }
-              >
-                Generate lyrics <AudioLines size={15} />
-              </button>
+
             </div>
             {captionMessage && (
               <p className="caption-message" role="status">
@@ -706,7 +706,7 @@ export default function App() {
                 Review & edit lyrics{" "}
                 <span>{options.captions.length} lines</span>
               </summary>
-              <label htmlFor="captions">Seconds into this clip → lyrics</label>
+              <label htmlFor="captions">Seconds into the full song → lyrics</label>
               <textarea
                 id="captions"
                 disabled={!track || busy}
@@ -734,6 +734,8 @@ export default function App() {
                   disabled={busy}
                   onClick={() => {
                     setCaptionText("");
+                    setResult(null);
+                    setTranscript({ cues: [] });
                     setOptions((current) => ({ ...current, captions: [] }));
                     setCaptionMessage("Instrumental mode: no lyric captions.");
                   }}
@@ -760,6 +762,7 @@ export default function App() {
                 disabled={busy}
                 onChange={(event) => {
                   seekPreview(0);
+                  setResult(null);
                   setOptions((current) => ({
                     ...current,
                     branded: event.target.checked,
@@ -770,7 +773,7 @@ export default function App() {
             </label>
             <p className="section-copy">
               Music starts first. The logo arrives at 2.5s, returns after the
-              clip, then fades to a black thank-you card.
+              song, then fades to a black thank-you card.
             </p>
             <div className="timeline-strip">
               <span>MUSIC</span>
@@ -790,72 +793,22 @@ export default function App() {
               <span>30 FPS</span>
               <span>MP4</span>
             </div>
-            <button
-              type="button"
-              className="export-button"
-              disabled={
-                !track || busy || !analysis || !options.episode || captionDirty
-              }
-              onClick={() =>
-                startJob("/api/renders", { trackId: track.id, ...options })
-              }
-            >
-              {busy ? (
-                <>
-                  <LoaderCircle size={18} className="spin" />
-                  {job?.type === "render"
-                    ? "Creating your video"
-                    : job?.type === "transcribe"
-                      ? "Listening for lyrics"
-                      : "Preparing your sound"}
-                </>
-              ) : (
-                <>
-                  <span>
-                    Generate video ·{" "}
-                    {totalDuration(options.duration, options.branded).toFixed(
-                      1,
-                    )}
-                    s
-                  </span>
-                  <ArrowRight size={20} />
-                </>
-              )}
-            </button>
+            {track && !result && (
+              <button type="button" className="export-button"
+                disabled={busy || !analysis || !options.episode || captionDirty}
+                onClick={() => startJob("/api/videos", {
+                  trackId: track.id, ...videoSettings(),
+                  ...(transcript ? { captions: options.captions } : {}),
+                })}>
+                {busy ? <><LoaderCircle size={18} className="spin" /> Creating your full video</>
+                  : <>Update full video <ArrowRight size={20} /></>}
+              </button>
+            )}
             <p className="footnote">
               Use music and artwork you have permission to share.
             </p>
           </section>
-          {active(job) && (
-            <div className="job-progress" role="status" aria-live="polite">
-              <div>
-                <span>{job.message}</span>
-                <strong>{job.progress}%</strong>
-              </div>
-              <progress max="100" value={job.progress} />
-              <button
-                className="text-button"
-                onClick={() =>
-                  api(`/api/jobs/${job.id}/cancel`, {})
-                    .then(setJob)
-                    .catch((error) => setError(error.message))
-                }
-              >
-                Cancel job
-              </button>
-            </div>
-          )}
-          {result && (
-            <div className="download-panel" role="status">
-              <div>
-                <Check size={18} />
-                <strong>Your find is ready.</strong>
-              </div>
-              <a className="download-link" href={result.downloadUrl}>
-                <ArrowDownToLine size={17} /> Download MP4
-              </a>
-            </div>
-          )}
+          </details>
           {result?.description && (
             <section className="description-panel">
               <div className="section-heading">
@@ -882,17 +835,6 @@ export default function App() {
                 <button className="secondary-button" onClick={copyDescription}>
                   {copied ? "Copied" : "Copy description"} <Check size={14} />
                 </button>
-                <a className="text-button" href={result.descriptionUrl}>
-                  Save .txt
-                </a>
-                {result.artworkUrl && (
-                  <a className="text-button" href={result.artworkUrl}>
-                    Cover art
-                  </a>
-                )}
-                <a className="text-button" href={result.captionsUrl}>
-                  Subtitles .srt
-                </a>
               </div>
               <div className="tiktok-panel">
                 {!tiktok?.configured ? (
@@ -942,6 +884,7 @@ export default function App() {
             {result ? (
               <video
                 controls
+                controlsList="nodownload"
                 playsInline
                 src={result.videoUrl}
                 poster={result.posterUrl}
@@ -959,11 +902,12 @@ export default function App() {
               />
             )}
           </div>
-          {result && (
+          {result?.fullLength === true && (
             <a className="video-download" href={result.downloadUrl}>
-              <ArrowDownToLine size={18} /> Download MP4
+              <ArrowDownToLine size={18} /> Download full video
             </a>
           )}
+          {track && !result && (
           <div className="playback-controls">
             <button
               className="icon-button"
@@ -993,7 +937,8 @@ export default function App() {
             </span>
             <Headphones size={16} className="headphones" />
           </div>
-          {!result && (
+          )}
+          {track && !result && (
             <div className="preview-timeline">
               <input
                 aria-label="Preview timeline"
@@ -1050,7 +995,7 @@ export default function App() {
             </button>
           ) : (
             <p className="preview-note">
-              Real sound. Real movement. Every frame follows the music.
+              {track ? "Live preview · download the finished full video after saving changes." : "Paste a song link. The whole video and lyrics are made automatically."}
             </p>
           )}
           <div className="preview-features">
@@ -1076,9 +1021,7 @@ export default function App() {
                 className="export-history-item"
                 key={item.id}
                 onClick={() => {
-                  seekPreview(0);
-                  setResult(item.result);
-                  setCopied(false);
+                  showVideo(item).catch((error) => setError(error.message));
                 }}
               >
                 <img src={item.result.posterUrl} alt="" />

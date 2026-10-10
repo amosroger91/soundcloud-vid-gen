@@ -8,6 +8,7 @@ import {
   importSchema,
   renderSchema,
   transcribeSchema,
+  videoSchema,
   uuidSchema,
   validateClip,
 } from "./validation.mjs";
@@ -52,7 +53,7 @@ export async function createApp({ jobs = new Jobs() } = {}) {
         .json({ error: "Cross-origin requests are not allowed." });
     next();
   });
-  app.use(express.json({ limit: "256kb" }));
+  app.use(express.json({ limit: "2mb" }));
   // Public homepage, privacy policy, terms, and TikTok URL verification file.
   app.use("/site", express.static(path.join(root, "docs")));
   app.get("/api/health", async (_req, res) => {
@@ -93,6 +94,11 @@ export async function createApp({ jobs = new Jobs() } = {}) {
   app.post("/api/demo", async (_req, res) =>
     res.status(202).json(await jobs.add("demo")),
   );
+  app.post("/api/videos", async (req, res) => {
+    const options = videoSchema.parse(req.body);
+    if (options.trackId) await getTrack(options.trackId);
+    res.status(202).json(await jobs.add("generate", options));
+  });
   app.post("/api/transcriptions", async (req, res) => {
     const options = transcribeSchema.parse(req.body);
     const track = await getTrack(options.trackId);
@@ -140,7 +146,7 @@ export async function createApp({ jobs = new Jobs() } = {}) {
   app.post("/api/tiktok/drafts", async (req, res) => {
     const renderId = uuidSchema.parse(req.body?.renderId);
     const render = jobs.jobs.get(renderId);
-    if (render?.type !== "render" || render.status !== "complete")
+    if (!["render", "generate"].includes(render?.type) || render.status !== "complete")
       return res.status(404).json({ error: "This video is not ready." });
     if (!(await tiktokStatus()).connected)
       return res
@@ -171,7 +177,7 @@ export async function createApp({ jobs = new Jobs() } = {}) {
   ]) {
     app.get(`/api/renders/:id/${route}`, (req, res) => {
       const job = jobs.jobs.get(uuidSchema.parse(req.params.id));
-      if (job?.type !== "render" || job.status !== "complete")
+      if (!["render", "generate"].includes(job?.type) || job.status !== "complete")
         return res.status(404).json({ error: "This video is not ready." });
       const target = path.join(renderDir(req.params.id), file);
       if (route === "download")

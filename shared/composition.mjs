@@ -1,6 +1,8 @@
 import { timeline, ease } from "./timeline.mjs";
 import { drawLogo } from "./logo.mjs";
 import { drawCaptions } from "./caption-drawing.mjs";
+import { getDirection, directionAt } from "./direction.mjs";
+import { drawAtmosphere, drawArtworkStage, SHOT_LABELS } from "./visuals.mjs";
 
 export const THEMES = {
   ember: {
@@ -49,7 +51,7 @@ function wrap(ctx, value, width, size, maxLines = 2) {
 }
 export function frameAt(analysis, time) {
   return (
-    analysis?.frames[
+    analysis?.frames?.[
       Math.min(
         analysis.frames.length - 1,
         Math.max(0, Math.floor(time * analysis.fps)),
@@ -77,14 +79,12 @@ export function clipWaveform(analysis, start, duration, count = 110) {
 const BASE_LAYOUT = {
   header: { seriesY: 171, markY: 252, markSize: 50, findsY: 348, findsSize: 111, ruleY: 379 },
   art: { x: 470, y: 764, size: 720 },
-  glowY: 700,
-  rings: { x: 474, y: 760, radius: 406, step: 32, yExtra: 10 },
   onRepeatY: 1155,
   titleY: 1211,
-  titleSize: 37,
-  titleStep: 46,
+  titleSize: 44,
+  titleStep: 50,
   artistY: 1300,
-  artistSize: 24,
+  artistSize: 26,
   spectrumY: 1351,
   barBase: 1477,
   barMax: 108,
@@ -99,12 +99,10 @@ const BASE_LAYOUT = {
 const LYRIC_LAYOUT = {
   header: { seriesY: 158, markY: 230, markSize: 46, findsY: 312, findsSize: 92, ruleY: 342 },
   art: { x: 470, y: 640, size: 500 },
-  glowY: 576,
-  rings: { x: 474, y: 640, radius: 290, step: 22, yExtra: 8 },
   onRepeatY: 948,
   titleY: 1000,
-  titleSize: 34,
-  titleStep: 42,
+  titleSize: 38,
+  titleStep: 44,
   artistY: 1096,
   artistSize: 22,
   spectrumY: 1376,
@@ -155,6 +153,8 @@ export function drawFrame(
     episode = "001",
     branded = true,
     captions = [],
+    motion = "dynamic",
+    variation = 0,
   },
 ) {
   const colors = THEMES[theme] || THEMES.ember;
@@ -187,50 +187,17 @@ export function drawFrame(
     return;
   }
   const layout = frameLayout(captions.length > 0);
-  ctx.fillStyle = colors.bg;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  const glow = ctx.createRadialGradient(
-    layout.art.x + 50,
-    layout.glowY,
-    60,
-    layout.art.x + 50,
-    layout.glowY,
-    1030,
-  );
-  glow.addColorStop(0, `${colors.accent}38`);
-  glow.addColorStop(1, `${colors.accent}00`);
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  // Quiet coordinate grid and orbit traces give the visual a record-sleeve feel.
-  ctx.strokeStyle = "#ffffff08";
-  ctx.lineWidth = 1;
-  for (let x = 70; x < WIDTH; x += 70) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, HEIGHT);
-    ctx.stroke();
+  const plan = getDirection({ track, analysis, start, duration, episode, motion, variation });
+  const state = directionAt(plan, phase.musicTime);
+  // Motion stops with the selected audio, so the silent outro has no phantom beats.
+  if (phase.stage !== "music") state.beat = 0;
+  const visual = { art, colors, layout, state, time: phase.musicTime, frame, motion };
+  drawAtmosphere(ctx, visual);
+  if (state.index > 0 && state.transition < 1) {
+    const previous = directionAt(plan, state.shot.start - 1 / 30);
+    drawArtworkStage(ctx, { ...visual, state: previous, alpha: 1 - state.transition });
   }
-  for (let y = 60; y < HEIGHT; y += 70) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(WIDTH, y);
-    ctx.stroke();
-  }
-  ctx.strokeStyle = `${colors.accent}32`;
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 3; i++) {
-    ctx.beginPath();
-    ctx.ellipse(
-      layout.rings.x,
-      layout.rings.y,
-      layout.rings.radius + i * layout.rings.step + frame.peak * 9,
-      layout.rings.radius + layout.rings.yExtra + i * layout.rings.step,
-      time * 0.08,
-      0,
-      Math.PI * 2,
-    );
-    ctx.stroke();
-  }
+  drawArtworkStage(ctx, { ...visual, alpha: state.transition });
 
   const header = layout.header;
   ctx.fillStyle = colors.accent;
@@ -251,46 +218,8 @@ export function drawFrame(
   text(ctx, "FINDS", 104, header.findsY, header.findsSize, colors.accent, 800);
   rule(ctx, 110, header.ruleY, 720, "#ffffff30");
 
-  const size = layout.art.size;
-  ctx.save();
-  ctx.translate(layout.art.x, layout.art.y);
-  const scale = 1 + Math.min(1, frame.peak) * 0.006;
-  ctx.scale(scale, scale);
-  ctx.shadowColor = "#00000088";
-  ctx.shadowBlur = 60;
-  ctx.fillStyle = colors.bg;
-  ctx.fillRect(-size / 2, -size / 2, size, size);
-  ctx.shadowBlur = 0;
-  if (art) {
-    const side = Math.min(art.width, art.height);
-    ctx.drawImage(
-      art,
-      (art.width - side) / 2,
-      (art.height - side) / 2,
-      side,
-      side,
-      -size / 2,
-      -size / 2,
-      size,
-      size,
-    );
-  } else {
-    const fit = size / 720;
-    const gradient = ctx.createLinearGradient(
-      -size / 2,
-      -size / 2,
-      size / 2,
-      size / 2,
-    );
-    gradient.addColorStop(0, colors.accent);
-    gradient.addColorStop(1, colors.bg);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(-size / 2, -size / 2, size, size);
-    text(ctx, "YOUR NEXT", -288 * fit, -10 * fit, 56 * fit, "#fff", 700);
-    text(ctx, "FAVORITE.", -288 * fit, 70 * fit, 70 * fit, "#fff", 800);
-  }
-  ctx.restore();
-  text(ctx, "01 / ON REPEAT", 110, layout.onRepeatY, 18, colors.secondary, 500);
+  text(ctx, `${String(state.index + 1).padStart(2, "0")} / ${SHOT_LABELS[state.shot.kind]}`,
+    110, layout.onRepeatY, 18, colors.secondary, 500);
   const titleLines = wrap(
     ctx,
     track?.title || "A good find deserves a moment.",
@@ -341,6 +270,13 @@ export function drawFrame(
       barHeight,
     );
   });
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  frame.bands.forEach((value, i) => {
+    ctx.fillRect(110 + i * (barWidth + gap), layout.barBase + 4,
+      barWidth, Math.max(2, value * 12));
+  });
+  ctx.restore();
   rule(ctx, 110, layout.barBase + 10, 720, "#ffffff20");
 
   const points = wave || clipWaveform(analysis, start, duration);

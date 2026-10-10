@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { MAX_TRACK_SECONDS } from "./config.mjs";
+import { MAX_CAPTION_LINES } from "../shared/limits.mjs";
 
 const soundcloudHosts = new Set([
   "soundcloud.com",
@@ -52,8 +54,7 @@ export async function resolveSource(value, signal) {
 }
 
 export const uuidSchema = z.string().uuid();
-export const importSchema = z.object({
-  url: z
+const sourceUrlSchema = z
     .string()
     .max(2048)
     .transform((url, ctx) => {
@@ -63,24 +64,26 @@ export const importSchema = z.object({
         ctx.addIssue({ code: "custom", message: error.message });
         return z.NEVER;
       }
-    }),
+    });
+export const importSchema = z.object({
+  url: sourceUrlSchema,
 });
 export const clipSchema = z.object({
   trackId: uuidSchema,
-  start: z.number().finite().min(0),
-  duration: z.number().finite().min(3).max(60),
+  start: z.number().finite().min(0).max(MAX_TRACK_SECONDS),
+  duration: z.number().finite().min(3).max(MAX_TRACK_SECONDS),
 });
 const wordSchema = z
   .object({
-    start: z.number().finite().min(0).max(60),
-    end: z.number().finite().min(0).max(60),
+    start: z.number().finite().min(0).max(MAX_TRACK_SECONDS),
+    end: z.number().finite().min(0).max(MAX_TRACK_SECONDS),
     text: z.string().trim().min(1).max(120),
   })
   .refine((word) => word.end > word.start, "Word end must follow its start.");
 export const captionSchema = z
   .object({
-    start: z.number().finite().min(0).max(60),
-    end: z.number().finite().min(0).max(60),
+    start: z.number().finite().min(0).max(MAX_TRACK_SECONDS),
+    end: z.number().finite().min(0).max(MAX_TRACK_SECONDS),
     text: z.string().trim().min(1).max(120),
     words: z.array(wordSchema).max(30).optional(),
   })
@@ -94,27 +97,33 @@ export const captionSchema = z
         )),
     "Caption timing is invalid.",
   );
-export const renderSchema = clipSchema
-  .extend({
+const visualSettings = {
     theme: z.enum(["ember", "ice", "violet"]).default("ember"),
+    motion: z.enum(["dynamic", "drift"]).default("dynamic"),
+    variation: z.number().int().min(0).max(9999).default(0),
     episode: z
       .string()
       .regex(/^\d{1,3}$/)
       .default("001"),
     branded: z.boolean().default(true),
-    captions: z.array(captionSchema).max(200).default([]),
+};
+const captionsSchema = z.array(captionSchema).max(MAX_CAPTION_LINES);
+const orderedCaptions = (captions) =>
+  captions.every(
+    (cue, i, all) => i === 0 || cue.start >= all[i - 1].end - 0.01,
+  );
+export const renderSchema = clipSchema
+  .extend({
+    ...visualSettings,
+    captions: captionsSchema.default([]),
   })
   .refine(
     (options) =>
-      options.captions.every(
-        (cue, i, all) =>
-          cue.end <= options.duration + 0.01 &&
-          (i === 0 || cue.start >= all[i - 1].end - 0.01),
-      ),
+      orderedCaptions(options.captions) &&
+      options.captions.every((cue) => cue.end <= options.duration + 0.01),
     "Captions must be ordered, non-overlapping, and within the clip.",
   );
-export const transcribeSchema = clipSchema.extend({
-  language: z
+const languageSchema = z
     .enum([
       "auto",
       "english",
@@ -126,8 +135,34 @@ export const transcribeSchema = clipSchema.extend({
       "japanese",
       "korean",
     ])
-    .default("auto"),
+    .default("auto");
+export const transcribeSchema = clipSchema.extend({
+  language: languageSchema,
 });
+
+// Full-song generation deliberately has no start or duration controls. Leaving
+// captions unset requests automatic lyrics; an explicit [] keeps it instrumental.
+export const videoSchema = z
+  .object({
+    url: sourceUrlSchema.optional(),
+    trackId: uuidSchema.optional(),
+    demo: z.literal(true).optional(),
+    ...visualSettings,
+    language: languageSchema,
+    captions: captionsSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (options) =>
+      [options.url, options.trackId, options.demo].filter(
+        (source) => source !== undefined,
+      ).length === 1,
+    "Choose exactly one source: a SoundCloud URL, an imported song, or the demo.",
+  )
+  .refine(
+    (options) => !options.captions || orderedCaptions(options.captions),
+    "Captions must be ordered and non-overlapping.",
+  );
 
 export function validateClip(options, track) {
   if (options.start + options.duration > track.duration + 0.02)

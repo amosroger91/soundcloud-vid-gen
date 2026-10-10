@@ -1,7 +1,7 @@
 import path from "node:path";
 import os from "node:os";
 import { env, pipeline } from "@huggingface/transformers";
-import { ffmpegPath } from "./config.mjs";
+import { ffmpegPath, SAMPLE_RATE, MAX_TRACK_SECONDS } from "./config.mjs";
 import { getTrack, trackDir } from "./storage.mjs";
 import { validateClip } from "./validation.mjs";
 import { run } from "./process.mjs";
@@ -45,7 +45,10 @@ export async function transcribeAudio(
   { start, duration, language = "auto" },
   report,
   signal,
+  dependencies = {},
 ) {
+  if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_TRACK_SECONDS)
+    throw new Error("Choose a song up to 10 minutes long.");
   report(3, "Preparing audio for lyric transcription…");
   // Seek after the input so the clip starts on the exact sample. A leading seek can begin early and shift every word.
   const raw = await run(
@@ -63,12 +66,17 @@ export async function transcribeAudio(
       "-ac",
       "1",
       "-ar",
-      "16000",
+      String(SAMPLE_RATE),
       "-f",
       "f32le",
       "pipe:1",
     ],
-    { signal, binary: true, maxBytes: 16000 * 4 * 61 },
+    {
+      signal,
+      binary: true,
+      // PCM uses four bytes per sample. Include a second for decoder padding.
+      maxBytes: Math.ceil((duration + 1) * SAMPLE_RATE) * 4,
+    },
   );
   const samples = Float32Array.from({ length: raw.length / 4 }, (_, index) =>
     raw.readFloatLE(index * 4),
@@ -81,9 +89,9 @@ export async function transcribeAudio(
     return {
       cues: [],
       words: [],
-      note: "No audible vocals were detected in this silent clip.",
+      note: "No audible vocals were detected in this silent audio.",
     };
-  const transcriber = await loadTranscriber(report);
+  const transcriber = await (dependencies.loadTranscriber || loadTranscriber)(report);
   signal.throwIfAborted();
   report(25, "Listening for lyrics and aligning words…");
   const output = await transcriber(samples, {
@@ -95,8 +103,8 @@ export async function transcribeAudio(
   });
   signal.throwIfAborted();
   const words = normalizeWords(output.chunks, duration).filter((word) => {
-    const first = Math.floor(word.start * 16000),
-      last = Math.min(samples.length, Math.ceil(word.end * 16000));
+    const first = Math.floor(word.start * SAMPLE_RATE),
+      last = Math.min(samples.length, Math.ceil(word.end * SAMPLE_RATE));
     let energy = 0;
     for (let i = first; i < last; i++) energy += samples[i] ** 2;
     return last > first && Math.sqrt(energy / (last - first)) > 0.001;
@@ -107,8 +115,8 @@ export async function transcribeAudio(
     words,
     model: modelName,
     note: words.length
-      ? "Automatic lyrics can mishear vocals over music. Review the words and timing before exporting."
-      : "No timed lyrics were found. You can add captions manually or leave this clip instrumental.",
+      ? "Automatic lyrics can mishear vocals over music. You can edit the words and timing, then regenerate the full video."
+      : "No timed lyrics were found. You can add captions manually or leave this song instrumental.",
   };
 }
 export async function transcribeTrack(options, report, signal) {

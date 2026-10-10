@@ -1,3 +1,5 @@
+import { MAX_CAPTION_LINES } from "./limits.mjs";
+
 export function normalizeWords(chunks, duration) {
   return (chunks || [])
     .flatMap((chunk) => {
@@ -219,7 +221,8 @@ export function parseEditor(value, duration, previous = []) {
       );
       return original || cue;
     });
-  if (cues.length > 200) throw new Error("Use no more than 200 caption lines.");
+  if (cues.length > MAX_CAPTION_LINES)
+    throw new Error(`Use no more than ${MAX_CAPTION_LINES} caption lines.`);
   for (let i = 1; i < cues.length; i++)
     if (cues[i].start < cues[i - 1].end - 0.01)
       throw new Error(

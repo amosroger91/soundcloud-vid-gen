@@ -19,6 +19,17 @@ test("health reports individual media tools", async () => {
   assert.equal(response.body.ok, true);
   assert.equal(typeof response.body.tools.ffmpeg, "boolean");
 });
+
+test("a single URL submission queues the complete workflow without clip bounds or manual lyrics", async () => {
+  const response = await request(app).post("/api/videos")
+    .send({ url: "https://soundcloud.com/artist/song" }).expect(202);
+  assert.equal(response.body.type, "generate");
+  assert.equal(response.body.input.language, "auto");
+  assert.equal(response.body.input.captions, undefined);
+  await request(app).post("/api/videos")
+    .send({ url: "https://soundcloud.com/artist/song", duration: 30 }).expect(400);
+  await request(app).post("/api/videos").send({ url: "https://example.com/song" }).expect(400);
+});
 test("rejects invalid sources before creating a background job", async () => {
   await request(app)
     .post("/api/imports")

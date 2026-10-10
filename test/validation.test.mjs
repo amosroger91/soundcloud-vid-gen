@@ -41,7 +41,7 @@ test("rejects invalid render lengths, IDs, themes and non-finite positions", () 
   };
   assert.equal(renderSchema.parse(input).theme, "ember");
   for (const patch of [
-    { duration: 61 },
+    { duration: 601 },
     { duration: 0 },
     { start: -1 },
     { start: Infinity },
@@ -59,4 +59,39 @@ test("rejects clips beyond source duration", () => {
   assert.doesNotThrow(() =>
     validateClip({ start: 20, duration: 10 }, { duration: 30 }),
   );
+});
+test("defaults old render requests to dynamic motion and a stable visual mix", () => {
+  const options = renderSchema.parse({
+    trackId: "310b3a1c-9693-4a5e-9eec-c3da41060270",
+    start: 0,
+    duration: 15,
+  });
+  assert.equal(options.motion, "dynamic");
+  assert.equal(options.variation, 0);
+});
+test("preserves motion choices and accepts only bounded integer visual mixes", () => {
+  const input = {
+    trackId: "310b3a1c-9693-4a5e-9eec-c3da41060270",
+    start: 0,
+    duration: 15,
+  };
+  for (const motion of ["dynamic", "drift"]) {
+    for (const variation of [0, 1, 9999]) {
+      const options = renderSchema.parse({ ...input, motion, variation });
+      assert.equal(options.motion, motion);
+      assert.equal(options.variation, variation);
+    }
+  }
+  for (const patch of [
+    { motion: "random" },
+    { motion: null },
+    { variation: -1 },
+    { variation: 10000 },
+    { variation: 1.5 },
+    { variation: NaN },
+    { variation: Infinity },
+    { variation: "1" },
+  ]) {
+    assert.equal(renderSchema.safeParse({ ...input, ...patch }).success, false);
+  }
 });

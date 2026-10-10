@@ -16,7 +16,11 @@ import { totalDuration } from "../shared/timeline.mjs";
 import { cuesToSrt } from "../shared/captions.mjs";
 import { videoDescription } from "./description.mjs";
 
+export const renderTimeoutMs = (duration) =>
+  Math.max(20 * 60 * 1000, Math.ceil(duration * 6000));
+
 export async function renderVideo(id, options, report, signal) {
+  signal.throwIfAborted();
   const track = await getTrack(options.trackId);
   validateClip(options, track);
   const directory = renderDir(id);
@@ -109,10 +113,10 @@ export async function renderVideo(id, options, report, signal) {
   signal.addEventListener("abort", abort, { once: true });
   const timeout = setTimeout(
     () => {
-      failure = new Error("Rendering exceeded 20 minutes.");
+      failure = new Error("Rendering took longer than expected. Please try again.");
       encoder.kill();
     },
-    20 * 60 * 1000,
+    renderTimeoutMs(videoDuration),
   );
   try {
     for (let i = 0; i < count; i++) {
@@ -152,7 +156,9 @@ export async function renderVideo(id, options, report, signal) {
       video?.width !== WIDTH ||
       video?.height !== HEIGHT ||
       video?.codec_name !== "h264" ||
-      audio?.codec_name !== "aac"
+      audio?.codec_name !== "aac" ||
+      Math.abs(Number(info.format.duration) - videoDuration) > 0.15 ||
+      !Number.isFinite(Number(info.format.duration))
     )
       throw new Error("The encoded video did not pass output validation.");
     await rename(temporary, output);
@@ -185,6 +191,8 @@ export async function renderVideo(id, options, report, signal) {
       fps: FPS,
       duration: videoDuration,
       clipDuration: options.duration,
+      sourceDuration: track.duration,
+      fullLength: options.start === 0 && Math.abs(options.duration - track.duration) < 0.02,
       title: track.title,
       artist: track.artist,
     };

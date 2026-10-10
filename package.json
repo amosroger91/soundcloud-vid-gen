@@ -14,6 +14,8 @@
     "start": "node server/index.mjs",
     "test": "node --test --test-concurrency=1 test/*.test.mjs",
     "test:render": "node scripts/smoke-render.mjs",
+    "test:visuals": "node scripts/visual-showcase.mjs --render",
+    "test:full-song": "node scripts/check-full-song.mjs",
     "test:browser": "node scripts/browser-check.mjs",
     "setup:speech": "node scripts/setup-speech.mjs",
     "logo": "node scripts/logo.mjs"

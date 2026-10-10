@@ -6,208 +6,87 @@ import { root } from "../server/config.mjs";
 
 const directory = path.join(root, "test-results");
 await mkdir(directory, { recursive: true });
-const browser = await chromium.launch({
-  channel: process.platform === "win32" ? "chrome" : undefined,
-  headless: true,
-});
+const browser = await chromium.launch({ channel: process.platform === "win32" ? "chrome" : undefined, headless: true });
 try {
-  const page = await browser.newPage({
-    viewport: { width: 1440, height: 1100 },
-    deviceScaleFactor: 1,
-  });
-  const errors = [];
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
+  const errors = [], submissions = [], manualSteps = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("request", (request) => {
+    if (request.method() === "POST" && /\/api\/(renders|transcriptions)$/.test(request.url()))
+      manualSteps.push(request.url());
+  });
+  // Test the real URL-button workflow using our original instrumental demo
+  // instead of a third-party download or speech-model download.
+  await page.route("**/api/health", (route) => route.fulfill({
+    json: { ok: true, ready: true, tools: { downloader: true, ffmpeg: true, ffprobe: true, importRuntime: true } },
+  }));
+  await page.route("**/api/videos", async (route) => {
+    const input = route.request().postDataJSON();
+    submissions.push(input);
+    assert.equal(input.start, undefined);
+    assert.equal(input.duration, undefined);
+    assert.equal(input.captions, undefined);
+    const { url, ...settings } = input;
+    assert.equal(url, "https://soundcloud.com/artist/whole-song");
+    await route.continue({ postData: JSON.stringify({ ...settings, demo: true }) });
+  });
   await page.goto(process.env.APP_URL || "http://127.0.0.1:4317");
   await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({
-    path: path.join(directory, "studio-empty.png"),
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Try a demo" }).click();
-  await page
-    .getByRole("button", { name: /^Generate video/ })
-    .waitFor({ timeout: 120000 });
-  await page
-    .locator(".track-card")
-    .getByText("After Hours", { exact: true })
-    .waitFor();
-  await page.getByRole("button", { name: "Ice palette" }).click();
-  assert.equal(
-    await page
-      .getByRole("button", { name: "Ice palette" })
-      .getAttribute("aria-pressed"),
-    "true",
-  );
-  await page.getByRole("button", { name: "Ember palette" }).click();
-  await page
-    .getByRole("spinbutton", { name: "Clip length in seconds" })
-    .fill("8");
-  await page.getByRole("spinbutton", { name: "Start in seconds" }).fill("4");
-  await page.getByRole("button", { name: "Generate lyrics" }).click();
-  await page
-    .getByText("The demo track is instrumental.", { exact: false })
-    .waitFor({ timeout: 60000 });
-  await page.locator(".caption-editor summary").click();
-  await page
-    .locator("#captions")
-    .fill(
-      "0.30 --> 2.40 | Caption timing test\n5.80 --> 7.80 | A little more listening",
-    );
-  await page.getByRole("button", { name: "Apply lyrics" }).click();
-  await page.getByRole("button", { name: "Play preview", exact: true }).click();
-  await page.waitForFunction(
-    () => document.querySelector("audio").currentTime > 4.6,
-  );
-  await page
-    .getByRole("button", { name: "Pause preview", exact: true })
-    .click();
-  assert.ok(await page.locator("audio").evaluate((audio) => audio.paused));
-  await page.screenshot({
-    path: path.join(directory, "studio-desktop.png"),
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Intro", exact: true }).click();
-  await page.screenshot({
-    path: path.join(directory, "preview-intro.png"),
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Outro", exact: true }).click();
-  await page.screenshot({
-    path: path.join(directory, "preview-outro.png"),
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Thank you", exact: true }).click();
-  await page.screenshot({
-    path: path.join(directory, "preview-thanks.png"),
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Music", exact: true }).click();
-  await page.getByRole("button", { name: "Play preview", exact: true }).click();
-  await page.waitForFunction(
-    () =>
-      Number(document.querySelector('[aria-label="Preview timeline"]').value) >
-      14.1,
-    { timeout: 20000 },
-  );
-  await page
-    .getByRole("button", { name: "Play preview", exact: true })
-    .waitFor();
-  const stoppedAudio = await page
-    .locator("audio")
-    .evaluate((audio) => ({ paused: audio.paused, time: audio.currentTime }));
-  assert.ok(
-    stoppedAudio.paused && stoppedAudio.time >= 12 && stoppedAudio.time < 12.25,
-    "Music must stop at the selected clip boundary while the silent ending plays.",
-  );
-  await page.setViewportSize({ width: 390, height: 844 });
-  assert.ok(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
-    ),
-  );
-  await page.screenshot({
-    path: path.join(directory, "studio-mobile.png"),
-    fullPage: true,
-  });
-  await page.setViewportSize({ width: 1440, height: 1100 });
-  await page.getByRole("button", { name: /^Generate video/ }).click();
-  const videoDownload = page
-    .locator(".preview-section")
-    .getByRole("link", { name: "Download MP4", exact: true });
-  await videoDownload.waitFor({ timeout: 240000 });
-  const downloadUrl = await videoDownload.getAttribute("href");
-  const response = await page.request.get(
-    new URL(downloadUrl, page.url()).href,
-  );
-  assert.equal(response.status(), 200);
-  assert.ok(response.headers()["content-type"].includes("video/mp4"));
-  assert.ok(Number(response.headers()["content-length"]) > 100000);
-  await page.locator("video").evaluate(async (video) => {
-    await video.play();
-  });
-  await page.waitForFunction(
-    () => document.querySelector("video").currentTime > 0.2,
-  );
-  await page.locator("video").evaluate((video) => video.pause());
-  assert.deepEqual(
-    await page
-      .locator("video")
-      .evaluate((video) => [video.videoWidth, video.videoHeight]),
-    [1080, 1920],
-  );
-  assert.ok(
-    Math.abs(
-      (await page.locator("video").evaluate((video) => video.duration)) - 14.2,
-    ) < 0.15,
-  );
-  assert.match(await page.locator("#description").inputValue(), /Finds Studio/);
-  const descriptionUrl = await page
-    .getByRole("link", { name: "Save .txt" })
-    .getAttribute("href");
-  assert.match(
-    await (
-      await page.request.get(new URL(descriptionUrl, page.url()).href)
-    ).text(),
-    /Cover art:/,
-  );
-  const captionsUrl = await page
-    .getByRole("link", { name: "Subtitles .srt" })
-    .getAttribute("href");
-  assert.match(
-    await (
-      await page.request.get(new URL(captionsUrl, page.url()).href)
-    ).text(),
-    /00:00:00,300 --> 00:00:02,400/,
-  );
-  await page.screenshot({
-    path: path.join(directory, "studio-export.png"),
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Back to live preview" }).click();
-  await page
-    .getByRole("textbox", { name: "Song link", exact: true })
-    .fill("https://example.com/song");
-  await page.getByRole("button", { name: "Import track", exact: true }).click();
-  await page
-    .getByRole("alert")
-    .filter({ hasText: "Only SoundCloud song links" })
-    .waitFor();
+  assert.equal(await page.getByRole("button", { name: /^Generate lyrics$/ }).count(), 0);
+  assert.equal(await page.getByRole("spinbutton", { name: "Clip length in seconds" }).count(), 0);
+  await page.getByRole("textbox", { name: "Song link", exact: true }).fill("https://soundcloud.com/artist/whole-song");
+  await page.locator(".customize-panel > summary").click();
+  await page.getByRole("checkbox", { name: "Animated intro, outro & thank-you ending" }).check();
+  await page.locator(".customize-panel > summary").click();
+  await page.getByRole("button", { name: "Generate full video", exact: true }).click();
+  await page.locator(".job-progress").waitFor();
+  assert.equal(await page.getByRole("link", { name: /Download/ }).count(), 0);
   await page.reload();
-  await page.getByText("After Hours", { exact: true }).first().waitFor();
+  await page.locator(".job-progress").waitFor();
+  const download = page.getByRole("link", { name: "Download full video", exact: true });
+  await download.waitFor({ timeout: 360000 });
+  assert.equal(submissions.length, 1, "one click must schedule the entire workflow");
+  assert.deepEqual(manualSteps, [], "browser must not schedule separate lyric/render requests");
+  assert.equal(await page.getByRole("link", { name: /Download/ }).count(), 1);
+  const href = await download.getAttribute("href");
+  const response = await page.request.get(new URL(href, page.url()).href);
+  assert.equal(response.status(), 200);
+  assert.ok(Number(response.headers()["content-length"]) > 100000);
+  await page.locator("video").evaluate((video) => new Promise((resolve) => {
+    if (video.readyState >= 1) resolve(); else video.addEventListener("loadedmetadata", resolve, { once: true });
+  }));
+  const media = await page.locator("video").evaluate((video) => ({
+    duration: video.duration, width: video.videoWidth, height: video.videoHeight,
+  }));
+  assert.deepEqual([media.width, media.height], [1080, 1920]);
+  assert.ok(Math.abs(media.duration - 51.2) < 0.15, `whole demo plus branding must be 51.2s, got ${media.duration}`);
+  assert.match(await page.locator("#description").inputValue(), /Finds Studio/);
+  await page.screenshot({ path: path.join(directory, "full-song-desktop.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.screenshot({ path: path.join(directory, "full-song-mobile.png"), fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.locator(".customize-panel > summary").click();
+  await page.getByRole("button", { name: "Remix visuals", exact: true }).click();
+  await page.locator(".video-stage canvas").waitFor();
+  assert.equal(await download.count(), 0, "live previews must have no download link");
+  await page.getByRole("radio", { name: "Drift", exact: true }).check();
+  assert.ok(await page.getByRole("radio", { name: "Drift", exact: true }).isChecked());
+  await page.locator(".caption-editor > summary").click();
+  await page.locator("#captions").fill("41 --> 43 | Near the end of the song");
+  await page.getByRole("button", { name: "Apply lyrics", exact: true }).click();
+  assert.equal(await download.count(), 0);
+  await page.getByRole("button", { name: "Update full video", exact: true }).waitFor();
+  await page.reload();
+  await download.waitFor();
+  assert.equal(await download.getAttribute("href"), href, "reload must restore the completed full video");
+  assert.equal(await page.getByRole("link", { name: /Download/ }).count(), 1);
   assert.deepEqual(errors, []);
-  await writeFile(
-    path.join(directory, "browser-report.json"),
-    JSON.stringify(
-      {
-        passed: true,
-        checks: [
-          "demo import",
-          "theme change",
-          "clip selection",
-          "preview audio",
-          "mobile overflow",
-          "instrumental transcription",
-          "caption editing",
-          "intro/outro/thank-you preview",
-          "background render",
-          "MP4 download",
-          "1080x1920 playback",
-          "full timeline duration",
-          "artist/artwork description",
-          "SRT sidecar",
-          "invalid URL",
-          "reload persistence",
-        ],
-        pageErrors: errors,
-        downloadUrl,
-      },
-      null,
-      2,
-    ),
-  );
-  console.log(
-    "Browser checks passed: desktop, mobile, audio preview, render, download, playback, validation, persistence.",
-  );
+  await writeFile(path.join(directory, "browser-report.json"), JSON.stringify({
+    passed: true, checks: ["single URL submission", "automatic full-song pipeline", "reload during generation", "one full-length download", "no preview downloads", "45-second source plus ending", "mobile layout", "optional edits", "reload finished result"],
+    media, submissions: submissions.length, pageErrors: errors,
+  }, null, 2));
+  console.log("Browser checks passed: one-click full song, automatic lyrics stage, reload recovery, single download, mobile, optional editing.");
 } finally {
   await browser.close();
 }

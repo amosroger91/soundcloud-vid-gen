@@ -62,6 +62,17 @@ test("cancelling inference terminates its worker without accepting a late comple
     "cancelled",
   );
 });
+
+test("cancelling automatic lyrics stops the workflow before a render can complete", async (t) => {
+  const { jobs, workers } = await fixture(t);
+  const job = await jobs.add("generate", { trackId: "existing-track" });
+  workers[0].emit("message", { type: "progress", stage: "transcribe", progress: 25, message: "Lyrics" });
+  await jobs.cancel(job.id);
+  assert.equal(jobs.active, null);
+  workers[0].emit("message", { type: "complete", result: { fullLength: true } });
+  assert.equal(job.status, "cancelled");
+  assert.equal(job.result, undefined);
+});
 test("restart recovers completed jobs and marks interrupted jobs as failed", async (t) => {
   const { jobs, workers, directory } = await fixture(t);
   const first = await jobs.add("demo");

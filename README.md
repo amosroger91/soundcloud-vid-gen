@@ -4,9 +4,13 @@
 
 ## Overview
 
-Paste a public SoundCloud song link, select a clip, and generate a **1080 × 1920, 30 fps MP4**. The video shows the cover art, title, and artist, with an audio-driven frequency spectrum and waveform. Local speech-to-text can generate timed lyric captions; words highlight as the vocals play, and you can review and edit the transcript before export.
+Paste a public SoundCloud song link and click the arrow beside it. One background job imports the **entire song**, generates timed lyrics automatically, and renders a **1080 × 1920, 30 fps MP4**. No separate lyric or render clicks are needed. Songs up to 10 minutes are supported, with their exact source duration preserved. The video includes cover art, title, artist, an audio-driven spectrum, and word-by-word lyric highlights.
 
-An original SoundCloud Finds logo arrives after 2.5 seconds of music, reappears after the selected clip ends, and gives way to a three-second black “Thanks for watching” card. Every export includes a description with artist/source/artwork attribution, downloadable cover art when available, and an SRT subtitle file. The app runs locally and requires no paid API key. Optionally, connect a TikTok account to send finished videos straight to your TikTok drafts.
+Videos move between three artwork treatments: a layered record sleeve, an audio-reactive orbit, and a widescreen crop. **Dynamic** uses 3–6 second scenes and favors detected musical attacks for transitions; **Drift** uses 6–9 second scenes with gentler movement. Short clips can contain one scene. Bass, treble, and actual audio attacks drive the accents, with no invented beats during silence. Backgrounds pick up the cover art, while titles and lyrics keep their own readable space.
+
+Track metadata, song duration, volume number, and the visual mix determine the camera moves and scene order. **Remix visuals** creates a new arrangement; repeated previews and exports of the same settings stay consistent. Scene selection avoids adjacent repeats and fixed two- or three-scene loops.
+
+An original SoundCloud Finds logo arrives after 2.5 seconds of music, reappears after the song ends, and gives way to a three-second black “Thanks for watching” card. The editor shows one **Download full video** button only after the full-length MP4 finishes. Live previews and old short-clip exports have no download button. Descriptions can be copied; artwork and SRT sidecars remain available through the API. The app runs locally and requires no paid API key. Optionally, connect a TikTok account to send finished videos straight to your TikTok drafts.
 
 ## Architecture
 
@@ -42,7 +46,7 @@ Open **http://127.0.0.1:4317**. Click **Try a demo** for original instrumental a
 
 Setup downloads the official standalone yt-dlp executable, verifies its release SHA-256 checksum, and prepares the FFmpeg/ffprobe binaries supplied by npm dependencies. Separate Python or FFmpeg installations are not required. Fonts and licenses are included; setup restores missing font files.
 
-For lyrics, the first **Generate lyrics** job downloads and caches a local Whisper model. To download it ahead of time:
+The first full-song job with vocals downloads and caches a local Whisper model automatically. To download it ahead of time:
 
 ```bash
 npm run setup:speech
@@ -88,16 +92,15 @@ Tokens are stored in `data/tiktok/token.json` and refreshed automatically. **Dis
 
 ## Usage / HTTP API
 
-1. **Import:** paste one SoundCloud song URL. Supported share links are resolved, with redirects restricted to SoundCloud hosts. Tracks can be 3 seconds to 10 minutes, up to 100 MB. The app stores an MP3, artwork JPEG, and metadata. Missing artwork gets a generated visual fallback.
-2. **Select:** choose a start time and a 3–60 second clip. Pick Ember, Ice, or Violet and set the series volume number.
-3. **Caption:** click **Generate lyrics**, choosing the vocal language if known. Review the result under **Review & edit lyrics**. Each line uses `start --> end | words`, with times in seconds **relative to the selected clip**. Apply edits before exporting. Changing the clip clears captions so an old transcript cannot silently become misaligned. Clear lyrics for instrumental clips.
-4. **Preview:** play the full sequence or use the Intro, Music, Outro, and Thank you scene buttons. The preview timeline includes the ending. The branding checkbox disables the added sequence when desired.
-5. **Export:** generate and download the MP4. With branding enabled, final length is **clip length + 6.2 seconds**: a 3.2-second silent logo outro and a 3-second black thank-you screen. The intro overlays the song and does not shift lyrics. Artist and artwork remain in the music/outro compositions.
-6. **Post:** copy the generated description or save its `.txt` file. Download cover art and `.srt` captions beside the MP4. The plain-text description includes the artwork source link (or generated-art attribution); the editor also displays the cover image. Reopen recent exports to retrieve their associated description and files.
+1. **Generate:** paste one public SoundCloud song URL and click the arrow beside the input. The app imports the whole song, finds lyrics, and renders it in one persisted job. You can reload the page while it works. Supported tracks are 3 seconds to 10 minutes, up to 100 MB.
+2. **Download:** when the job completes, use the single **Download full video** button. With branding enabled, the final duration is the full song plus 6.2 seconds for the logo outro and thank-you card. The intro overlays the music and never shifts the lyrics.
+3. **Optional edits:** expand **Optional style & lyric edits** to change the palette, motion, visual mix, branding, or lyric text. Apply lyric edits, then use **Update full video** to save a revised full-song export. Live previews never have download actions. Lyric times are seconds from the start of the song.
+4. **Post:** copy the generated description or send the completed video to TikTok drafts. Full-length exports are available in the history. Instrumental demo tracks finish without invented lyrics. A transcription failure stops the job and reports an error instead of silently exporting without lyrics.
 
 | Method | Endpoint                       | Purpose                                                                                                                           |
 | ------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | GET    | `/api/health`                  | Media-tool availability.                                                                                                          |
+| POST   | `/api/videos`                  | Full workflow with `{ "url": "https://soundcloud.com/artist/song" }`; automatically imports, transcribes, and renders the entire song. |
 | POST   | `/api/imports`                 | Start import with `{ "url": "https://soundcloud.com/artist/song" }`.                                                              |
 | POST   | `/api/demo`                    | Create the original instrumental demo.                                                                                            |
 | GET    | `/api/jobs`                    | Most recent 30 jobs.                                                                                                              |
@@ -109,7 +112,7 @@ Tokens are stored in `data/tiktok/token.json` and refreshed automatically. **Dis
 | GET    | `/api/tracks/:id/analysis`     | Spectrum frames and waveform envelope.                                                                                            |
 | POST   | `/api/transcriptions`          | Transcribe `{ "trackId": "uuid", "start": 0, "duration": 30, "language": "auto" }`; result includes timed words and grouped cues. |
 | POST   | `/api/renders`                 | Render `{ "trackId": "uuid", "start": 0, "duration": 30, "theme": "ember", "episode": "001", "branded": true, "captions": [] }`.  |
-| GET    | `/api/renders/:id/video`       | Completed MP4 preview.                                                                                                            |
+| GET    | `/api/renders/:id/video`       | Completed MP4 playback.                                                                                                            |
 | GET    | `/api/renders/:id/download`    | MP4 download.                                                                                                                     |
 | GET    | `/api/renders/:id/poster`      | Poster JPEG.                                                                                                                      |
 | GET    | `/api/renders/:id/description` | Generated `description.txt`.                                                                                                      |
@@ -121,6 +124,10 @@ Tokens are stored in `data/tiktok/token.json` and refreshed automatically. **Dis
 | GET    | `/api/renders/:id/artwork`     | Downloadable `cover-art.jpg`, when available.                                                                                     |
 
 Creation endpoints return `202` and a job ID. Poll until `status` is `complete`, `failed`, or `cancelled`. Caption cues contain `{ start, end, text, words? }`; optional words use the same fields. Times must be ordered and within the clip. Invalid input returns `400`, missing assets `404`, and a full queue `429`.
+
+Full-song `/api/videos` requests accept exactly one source: `url`, `trackId`, or `demo: true`. They accept visual settings and `language`, but reject `start` and `duration`. Omit `captions` for automatic transcription; supply edited captions (including an explicit empty array) to reuse manual edits. Generated results include `fullLength`, `sourceDuration`, track metadata, and captions. The lower-level import/transcription/render endpoints remain available for scripts.
+
+Render requests also accept `motion: "dynamic" | "drift"` (default `"dynamic"`) and `variation: 0..9999` (integer, default `0`). Save both with the other render settings to reproduce a mix.
 
 ## Project structure
 
@@ -156,12 +163,14 @@ test-results/    Local verification screenshots, fixtures, and reports (ignored)
 npm test              # analysis, validation, captions, timing, jobs, HTTP behavior
 npm run build         # production frontend bundle
 npm run test:render   # real portrait MP4 + codecs, duration, sync, silent-tail checks
-npm run test:browser  # run with the app serving locally
+npm run test:visuals  # six-frame visual contact sheet + 18-second motion showcase
+npm run test:browser  # one-click workflow; run with the app serving locally
+npm run test:full-song # 72.5s export with lyrics/audio past 60s; same server + DATA_DIR
 ```
 
 The render check uses original demo audio and explicitly supplied test captions; these are a caption-animation fixture, not lyrics claimed to come from the instrumental demo. It checks output geometry, codecs, frame rate, duration, selected audio offset, and silent outro, and saves representative decoded frames.
 
-The browser check exercises demo import, lyric editing, instrumental transcription behavior, palettes, playback, scene previews, mobile layout, rendering, downloads, descriptions/SRT, validation, and persistence. Windows uses installed Chrome. Elsewhere run `npx playwright install chromium` first. GitHub Actions runs tests, build, and the render check without requiring a SoundCloud account or speech-model download.
+The browser check submits the URL button once, substitutes original demo audio for the external source, and checks automatic generation, reload during work, the full 45-second source plus branding, a single full-length download, mobile layout, optional edits, and finished-result recovery. The full-song check separately encodes a 72.5-second source and verifies matching audio and visible captions after 60 seconds. Windows uses installed Chrome. Elsewhere run `npx playwright install chromium` first. GitHub Actions runs tests, build, and the render check without requiring a SoundCloud account or speech-model download.
 
 For additional transcription testing, supply a local vocal WAV to `node scripts/check-transcription.mjs <file.wav>`. `node scripts/check-vocal-workflow.mjs <file.wav>` mixes a fixture over original demo music, exercises transcription/export through the running HTTP server, and verifies cancellation preserves source media. Its default fixture expects the original test phrase containing “city lights”; adapt that assertion for a different fixture.
 
