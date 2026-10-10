@@ -29,3 +29,25 @@ jobs:
             test-results/render-report.json
             test-results/*-frame.png
           if-no-files-found: ignore
+  deploy:
+    # Ships main to https://finds.wellspringstudiollc.com once every check passes.
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    steps:
+      - name: Deploy over SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Server host key, pinned so the deploy can't be redirected.
+          HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJf2bSt+/BcMhSF6FhNqnqtumOCMLxhvN1Ah8/rxQmjX
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "185.249.196.235 $HOST_KEY" > ~/.ssh/known_hosts
+          # The key's forced command runs /opt/finds-studio/deploy.sh (see deploy/server-deploy.sh).
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes root@185.249.196.235
